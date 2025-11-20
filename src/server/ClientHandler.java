@@ -12,14 +12,14 @@ public class ClientHandler extends Thread {
     private GameManager gameManager;
     private ObjectOutputStream oos;
     private ObjectInputStream ois;
-    private int playerIndex; // 0=P1, 1=P2
+    private int playerIndex;
     private Player player;
     private boolean isReady = false;
 
     public ClientHandler(Socket socket, GameManager gameManager, int playerNum) {
         this.socket = socket;
         this.gameManager = gameManager;
-        this.playerIndex = playerNum - 1; // 1번 플레이어 -> 0번 인덱스
+        this.playerIndex = playerNum - 1;
         
         try {
             this.oos = new ObjectOutputStream(socket.getOutputStream());

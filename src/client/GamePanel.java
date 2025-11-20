@@ -47,12 +47,10 @@ public class GamePanel extends JPanel {
 
     private void drawPlayerPositions(java.util.List<Player> players) {
         if (players.isEmpty()) return;
-        
-        // P1 위치 표시
+
         Player p1 = players.get(0);
         mapButtons[p1.getY()][p1.getX()].setText(p1.getPlayerName());
-        
-        // P2 위치 표시
+
         if (players.size() > 1) {
             Player p2 = players.get(1);
             if (p1.getX() == p2.getX() && p1.getY() == p2.getY()) {

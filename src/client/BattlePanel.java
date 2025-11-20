@@ -89,10 +89,8 @@ public class BattlePanel extends JPanel {
             setAttackButtonsEnabled(true);
         });
     }
-    
-    // --- 👇 여기도 수정되었습니다 (잠재적 오류 수정) ---
     public void updateBattle(BattleState battleState) {
-        // GUI 업데이트를 EventQueue.invokeLater로 감쌉니다.
+
         EventQueue.invokeLater(() -> {
             shared.Player player = battleState.getPlayerInTurn();
             List<Monster> monsters = battleState.getMonsters();
@@ -114,7 +112,6 @@ public class BattlePanel extends JPanel {
     // --- ----------------------- ---
     
     public void log(String message) {
-        // 이 메소드는 이미 EventQueue를 사용하고 있어 스레드에 안전합니다.
         EventQueue.invokeLater(() -> {
             battleLog.append(message + "\n");
         });

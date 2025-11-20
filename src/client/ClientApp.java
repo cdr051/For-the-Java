@@ -23,26 +23,18 @@ public class ClientApp extends JFrame {
 
         networkManager = new NetworkManager(this);
         
-        // 1. 로비 패널 생성
         lobbyPanel = new LobbyPanel(networkManager);
         mainPanel.add(lobbyPanel, "LOBBY");
 
-        // 2. 게임 맵 스크린 (GamePanel + HudPanel)
-        // gameScreen 패널은 BorderLayout을 사용합니다.
         JPanel gameScreen = new JPanel(new BorderLayout()); 
         hudPanel = new HudPanel(networkManager);
         gamePanel = new GamePanel(networkManager);
-        
-        // --- 오류 발생 지점 (line 36-37) ---
-        // 이 코드가 작동하려면 'import java.awt.BorderLayout;'이 필요합니다.
+
         gameScreen.add(gamePanel, BorderLayout.CENTER);
         gameScreen.add(hudPanel, BorderLayout.EAST);
-        
-        // 이 코드가 작동하려면 mainPanel이 CardLayout이어야 합니다.
+
         mainPanel.add(gameScreen, "GAME_MAP");
-        // --- ----------------------- ---
-        
-        // 3. 전투 패널 생성
+
         battlePanel = new BattlePanel(networkManager);
         mainPanel.add(battlePanel, "BATTLE");
         
@@ -53,8 +45,6 @@ public class ClientApp extends JFrame {
         
         networkManager.connect("localhost", 9999);
     }
-
-    // --- (이하 NetworkManager가 호출하는 메소드들) ---
 
     public void updateLog(String message) {
         if (lobbyPanel.isShowing()) {

@@ -10,9 +10,9 @@ public class GameServer {
         gameManager = new GameManager();
         
         try (ServerSocket serverSocket = new ServerSocket(9999)) {
-            System.out.println("서버가 9999 포트에서 시작되었습니다.");
+            System.out.println("");
             int playerNum = 0;
-            while (playerNum < 2) { // 2명까지만 받음
+            while (playerNum < 2) {
                 Socket socket = serverSocket.accept();
                 playerNum++;
                 

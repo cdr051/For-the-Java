@@ -13,8 +13,7 @@ public class LobbyPanel extends JPanel {
     public LobbyPanel(NetworkManager networkManager) {
         this.networkManager = networkManager;
         setLayout(new BorderLayout(5, 5));
-        setPreferredSize(new Dimension(500, 400)); // 크기 조정
-
+        setPreferredSize(new Dimension(500, 400));
         logArea = new JTextArea("서버에 접속 중...");
         logArea.setEditable(false);
         add(new JScrollPane(logArea), BorderLayout.CENTER);
