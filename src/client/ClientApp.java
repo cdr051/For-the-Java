@@ -1,60 +1,117 @@
 package client;
 
-import javax.swing.JFrame;
-import java.awt.BorderLayout;
-import java.awt.EventQueue;
+import shared.BattleState;
+import shared.GameState;
+import javax.swing.*;
+import java.awt.*; // BorderLayout, CardLayout, EventQueue 등이 포함됩니다.
 
-/**
- * 클라이언트 GUI의 메인 프레임(JFrame)입니다.
- * GamePanel(맵)과 HudPanel(컨트롤)을 조립합니다.
- */
 public class ClientApp extends JFrame {
-
+    private CardLayout cardLayout;
+    private JPanel mainPanel;
+    private NetworkManager networkManager;
+    
+    private LobbyPanel lobbyPanel;
     private GamePanel gamePanel;
     private HudPanel hudPanel;
+    private BattlePanel battlePanel;
 
     public ClientApp() {
-        setTitle("For The JAVA - 턴제 맵 테스트");
+        setTitle("For The JAVA - Client");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setLayout(new BorderLayout());
+        cardLayout = new CardLayout();
+        mainPanel = new JPanel(cardLayout);
 
-        // 1. HudPanel 생성. '주사위 굴리기' 버튼(onDiceRoll)과
-        //    '현재 턴'을 물어보는 람다식(gamePanel::getCurrentPlayer)을 전달합니다.
-        hudPanel = new HudPanel(
-            this::onDiceRoll,       // 주사위 굴리기 액션
-            () -> gamePanel.getCurrentPlayer() // 현재 턴 확인
-        );
+        networkManager = new NetworkManager(this);
+        
+        // 1. 로비 패널 생성
+        lobbyPanel = new LobbyPanel(networkManager);
+        mainPanel.add(lobbyPanel, "LOBBY");
 
-        // 2. GamePanel 생성 (HudPanel을 넘겨서 로그를 찍을 수 있게 함)
-        gamePanel = new GamePanel(hudPanel);
-
-        // 3. JFrame에 두 패널을 배치
-        add(gamePanel, BorderLayout.CENTER);
-        add(hudPanel, BorderLayout.EAST);
-
+        // 2. 게임 맵 스크린 (GamePanel + HudPanel)
+        // gameScreen 패널은 BorderLayout을 사용합니다.
+        JPanel gameScreen = new JPanel(new BorderLayout()); 
+        hudPanel = new HudPanel(networkManager);
+        gamePanel = new GamePanel(networkManager);
+        
+        // --- 오류 발생 지점 (line 36-37) ---
+        // 이 코드가 작동하려면 'import java.awt.BorderLayout;'이 필요합니다.
+        gameScreen.add(gamePanel, BorderLayout.CENTER);
+        gameScreen.add(hudPanel, BorderLayout.EAST);
+        
+        // 이 코드가 작동하려면 mainPanel이 CardLayout이어야 합니다.
+        mainPanel.add(gameScreen, "GAME_MAP");
+        // --- ----------------------- ---
+        
+        // 3. 전투 패널 생성
+        battlePanel = new BattlePanel(networkManager);
+        mainPanel.add(battlePanel, "BATTLE");
+        
+        add(mainPanel);
         pack();
         setLocationRelativeTo(null);
         setResizable(false);
+        
+        networkManager.connect("localhost", 9999);
     }
 
-    /**
-     * HudPanel의 '주사위 굴리기' 버튼이 눌리면 호출되는 메소드
-     */
-    private void onDiceRoll() {
-        gamePanel.rollDice();
+    // --- (이하 NetworkManager가 호출하는 메소드들) ---
+
+    public void updateLog(String message) {
+        if (lobbyPanel.isShowing()) {
+            lobbyPanel.log(message);
+        } else {
+            hudPanel.log(message);
+        }
     }
 
-    /**
-     * 프로그램 시작점 (이 파일을 실행하세요)
-     */
+    public void showGameMap(GameState gameState) {
+        gamePanel.updateState(gameState); 
+        hudPanel.updateState(gameState);
+        cardLayout.show(mainPanel, "GAME_MAP");
+        setTitle("For The JAVA - Game Map");
+    }
+    
+    public void updateGameState(GameState gameState) {
+        gamePanel.updateState(gameState);
+        hudPanel.updateState(gameState);
+    }
+    
+    public void onDiceRolled(int result) {
+        hudPanel.log("주사위 결과: " + result + "!");
+        hudPanel.log(result + "칸 이하로 이동하세요.");
+        hudPanel.disableDiceButton();
+    }
+    
+    public void onTurnStarted(String message) {
+        hudPanel.log(message);
+        hudPanel.enableDiceButton();
+    }
+    
+    public void onBattleStart(BattleState battleState) {
+        EventQueue.invokeLater(() -> {
+            battlePanel.startBattle(battleState);
+            cardLayout.show(mainPanel, "BATTLE");
+            setTitle("For The JAVA - Battle!");
+        });
+    }
+
+    public void onBattleUpdate(BattleState battleState) {
+        EventQueue.invokeLater(() -> {
+            battlePanel.updateBattle(battleState);
+        });
+    }
+    
+    public void onBattleEnd(String message) {
+        EventQueue.invokeLater(() -> {
+            JOptionPane.showMessageDialog(this, message);
+            cardLayout.show(mainPanel, "GAME_MAP");
+            setTitle("For The JAVA - Game Map");
+        });
+    }
+    
     public static void main(String[] args) {
         EventQueue.invokeLater(() -> {
-            try {
-                ClientApp frame = new ClientApp();
-                frame.setVisible(true);
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
+            new ClientApp().setVisible(true);
         });
     }
 }

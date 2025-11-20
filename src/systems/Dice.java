@@ -9,6 +9,6 @@ public class Dice {
     }
 
     public int rollD3() {
-        return rand.nextInt(3) + 1; // 0~2 + 1
+        return rand.nextInt(3) + 1;
     }
 }

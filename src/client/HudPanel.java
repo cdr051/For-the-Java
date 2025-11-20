@@ -1,35 +1,38 @@
 package client;
 
+import shared.GameProtocol;
+import shared.GameState; // GameState 임포트
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.ActionListener;
-import java.util.function.Supplier; // 현재 턴을 가져오기 위해
 
-/**
- * "주사위 굴리기" 버튼과 로그 창을 담당하는 HUD 패널입니다.
- */
 public class HudPanel extends JPanel {
     private JButton rollDiceButton;
     private JTextArea logArea;
-    private Supplier<Integer> getCurrentPlayerTurn; // 현재 턴 플레이어(1 or 2)
+    private NetworkManager networkManager;
+    private JLabel turnLabel;
 
-    // 'Runnable' (주사위 굴리기)과 'Supplier' (현재 턴 확인)를 받음
-    public HudPanel(Runnable onDiceRollAction, Supplier<Integer> getCurrentPlayerTurn) {
-        this.getCurrentPlayerTurn = getCurrentPlayerTurn;
+    public HudPanel(NetworkManager networkManager) {
+        this.networkManager = networkManager;
         setLayout(new BorderLayout(5, 5));
         setPreferredSize(new Dimension(250, 600));
 
-        // 1. 주사위 굴리기 버튼
-        rollDiceButton = new JButton("Player 1 턴: 주사위 굴리기");
-        rollDiceButton.addActionListener(e -> onDiceRollAction.run());
-        add(rollDiceButton, BorderLayout.NORTH);
+        turnLabel = new JLabel(" ", SwingConstants.CENTER);
+        turnLabel.setFont(new Font("SansSerif", Font.BOLD, 14));
+        add(turnLabel, BorderLayout.NORTH);
 
-        // 2. 로그 영역
         logArea = new JTextArea();
         logArea.setEditable(false);
         logArea.setLineWrap(true);
         JScrollPane scrollPane = new JScrollPane(logArea);
         add(scrollPane, BorderLayout.CENTER);
+        
+        rollDiceButton = new JButton("주사위 굴리기");
+        rollDiceButton.addActionListener(e -> {
+            networkManager.sendMessage(new GameProtocol(GameProtocol.C_MSG_ROLL_DICE, null));
+        });
+        add(rollDiceButton, BorderLayout.SOUTH);
+        
+        enableDiceButton(); 
     }
 
     public void log(String message) {
@@ -39,17 +42,18 @@ public class HudPanel extends JPanel {
         });
     }
 
-    // 턴이 시작되면 버튼 활성화
-    public void enableDiceButton() {
-        int playerTurn = getCurrentPlayerTurn.get();
-        rollDiceButton.setEnabled(true);
-        rollDiceButton.setText("Player " + playerTurn + " 턴: 주사위 굴리기");
+    public void updateState(GameState gameState) {
+        String turnText = gameState.getCurrentPlayer().getPlayerName() + "의 턴";
+        turnLabel.setText(turnText);
     }
 
-    // 주사위를 굴리면 버튼 비활성화
+    public void enableDiceButton() {
+        rollDiceButton.setEnabled(true);
+        rollDiceButton.setText(turnLabel.getText() + " : 주사위 굴리기");
+    }
+
     public void disableDiceButton() {
-        int playerTurn = getCurrentPlayerTurn.get();
         rollDiceButton.setEnabled(false);
-        rollDiceButton.setText("Player " + playerTurn + ", 이동할 칸을 선택...");
+        rollDiceButton.setText(turnLabel.getText() + " : 이동할 칸을 선택...");
     }
 }
