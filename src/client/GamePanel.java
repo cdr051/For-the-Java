@@ -1,194 +1,135 @@
 package client;
 
-import shared.TileType;
-import systems.BattleSystem;
-import systems.Dice;
-import systems.EventManager;
-import systems.ShopManager;
+import shared.*;
 import javax.swing.*;
+import javax.swing.border.EmptyBorder;
 import java.awt.*;
 
 public class GamePanel extends JPanel {
-    private static final int MAP_HEIGHT = 6;
-    private static final int MAP_WIDTH = 8;
+    private ClientApp mainApp;
+    private GameState gameState;
     
-    private TileType[][] mapData;
-    private JButton[][] mapButtons = new JButton[MAP_HEIGHT][MAP_WIDTH];
-    
-    //턴제
-    private int currentPlayer = 1; // 1=P1, 2=P2
-    private int player1X = 0, player1Y = 5;
-    private int player2X = 0, player2Y = 5;
+    // UI 컴포넌트
+    private MapPanel mapPanel; // 맵 그리는 부분 분리
+    private JPanel sidePanel;
+    private JLabel lblTurnInfo;
+    private JLabel lblMyStatus;
+    private JButton btnRoll;
+    private JButton btnEndTurn;
 
-    // 기능 클래스
-    private Dice dice;
-    private BattleSystem battleSystem;
-    private ShopManager shopManager;
-    private EventManager eventManager;
-    
-    private HudPanel hud; // 로그 출력
-    private int currentDiceRoll = 0; // 주사위 결과
+    public GamePanel(ClientApp app) {
+        this.mainApp = app;
+        setLayout(new BorderLayout());
 
-    public GamePanel(HudPanel hud) {
-        this.hud = hud; 
-        this.dice = new Dice();
-        this.battleSystem = new BattleSystem();
-        this.shopManager = new ShopManager();
-        this.eventManager = new EventManager();
-        this.mapData = server.MapGenerator.createMap();
-        this.mapData[5][0] = TileType.BLANK; 
+        // 1. 맵 패널 (중앙)
+        mapPanel = new MapPanel();
+        add(mapPanel, BorderLayout.CENTER);
 
-        setLayout(new GridLayout(MAP_HEIGHT, MAP_WIDTH, 2, 2));
-        for (int y = 0; y < MAP_HEIGHT; y++) {
-            for (int x = 0; x < MAP_WIDTH; x++) {
-                JButton tileButton = new JButton();
-                tileButton.setPreferredSize(new Dimension(100, 100));
-                
-                final int currentY = y;
-                final int currentX = x;
-                
-                tileButton.addActionListener(e -> handleTileClick(currentY, currentX));
-                
-                add(tileButton);
-                mapButtons[y][x] = tileButton;
-                updateButtonVisuals(y, x);
-            }
-        }
-        drawPlayerPositions();
-    }
-    
-    public int getCurrentPlayer() {
-        return this.currentPlayer;
-    }
+        // 2. 사이드 패널 (우측)
+        sidePanel = new JPanel();
+        sidePanel.setLayout(new BoxLayout(sidePanel, BoxLayout.Y_AXIS));
+        sidePanel.setPreferredSize(new Dimension(200, 0));
+        sidePanel.setBorder(new EmptyBorder(10, 10, 10, 10));
+        sidePanel.setBackground(new Color(230, 230, 230));
 
-    public void rollDice() {
-        if (currentDiceRoll != 0) return;
+        lblTurnInfo = new JLabel("게임 대기 중...");
+        lblTurnInfo.setFont(new Font("SansSerif", Font.BOLD, 16));
+        lblTurnInfo.setAlignmentX(Component.CENTER_ALIGNMENT);
 
-        this.currentDiceRoll = dice.rollD3();
-        hud.log("--- Player " + currentPlayer + " 턴 ---");
-        hud.log("주사위 결과: " + currentDiceRoll);
+        lblMyStatus = new JLabel("-");
+        lblMyStatus.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        // 버튼들
+        btnRoll = new JButton("🎲 주사위 굴리기");
+        btnRoll.setAlignmentX(Component.CENTER_ALIGNMENT);
+        btnRoll.addActionListener(e -> mainApp.send(new Message(Message.Type.ROLL_DICE, null)));
+
+        btnEndTurn = new JButton("🛡️ 턴 종료");
+        btnEndTurn.setAlignmentX(Component.CENTER_ALIGNMENT);
+        btnEndTurn.addActionListener(e -> mainApp.send(new Message(Message.Type.TURN_PASS, null)));
         
-        int currentX = (currentPlayer == 1) ? player1X : player2X;
-        int currentY = (currentPlayer == 1) ? player1Y : player2Y;
-
-        hud.log(currentDiceRoll + "칸 이하로 이동하세요.");
-        hud.disableDiceButton(); // 주사위 버튼 비활성화
+        // 간격 띄우기 및 추가
+        sidePanel.add(lblTurnInfo);
+        sidePanel.add(Box.createVerticalStrut(20));
+        sidePanel.add(lblMyStatus);
+        sidePanel.add(Box.createVerticalStrut(20));
+        sidePanel.add(btnRoll);
+        sidePanel.add(Box.createVerticalStrut(10));
+        sidePanel.add(btnEndTurn);
+        
+        add(sidePanel, BorderLayout.EAST);
     }
 
-    /**
-     * (GamePanel의 타일 클릭 시) 타일 클릭 처리
-     */
-    private void handleTileClick(int y, int x) {
-        //주사위 굴린지 확인
-        if (currentDiceRoll == 0) {
-            hud.log("먼저 [주사위 굴리기] 버튼을 눌러주세요.");
-            return;
-        }
+    public void updateState(GameState state) {
+        this.gameState = state;
+        mapPanel.repaint(); // 맵 다시 그리기 요청
+        updateSidePanel();  // 사이드 패널 갱신
+    }
 
-        //플레이어의 현재 좌표 가져오기
-        int oldX = (currentPlayer == 1) ? player1X : player2X;
-        int oldY = (currentPlayer == 1) ? player1Y : player2Y;
+    private void updateSidePanel() {
+        if (gameState == null) return;
 
-        //이동거리 확인
-        if (!isValidMove(oldX, oldY, x, y, currentDiceRoll)) {
-            hud.log("이동 불가: (" + x + "," + y + ")는 " + currentDiceRoll + "칸 이내(상하좌우)가 아닙니다.");
-            return;
-        }
+        Player currentP = gameState.players.get(gameState.currentTurnPlayerId);
+        boolean isMyTurn = (gameState.currentTurnPlayerId == mainApp.getMyId());
+        Player me = gameState.players.get(mainApp.getMyId());
+
+        // ⭐ [수정] 라운드 정보와 턴 정보를 함께 표시
+        lblTurnInfo.setText(
+            "<html><center>" +
+            "⏳ <b>ROUND " + gameState.roundNumber + "</b><br><br>" + // 라운드 표시
+            "현재 턴:<br><font size='5'>" + currentP.name + "</font>" +
+            "</center></html>"
+        );
         
-        //이동처리
-        if (currentPlayer == 1) {
-            player1X = x; player1Y = y;
+        // 내 턴이면 파란색, 아니면 검은색
+        if (isMyTurn) lblTurnInfo.setForeground(Color.BLUE);
+        else lblTurnInfo.setForeground(Color.BLACK);
+
+        // ... (나머지 버튼 로직 유지)
+        lblMyStatus.setText("<html>남은 이동력: <font color='red'>" + me.movePoints + "</font></html>");
+        
+        if (isMyTurn) {
+            btnRoll.setEnabled(me.movePoints == 0); 
+            btnEndTurn.setEnabled(true);
         } else {
-            player2X = x; player2Y = y;
+            btnRoll.setEnabled(false);
+            btnEndTurn.setEnabled(false);
         }
-        hud.log("Player " + currentPlayer + " 이동: (" + oldX + "," + oldY + ") -> (" + x + "," + y + ")");
-
-        processTileEvent(y, x);
-        drawPlayerPositions();
-        
-        //턴 끝
-        currentDiceRoll = 0;
-        currentPlayer = (currentPlayer == 1) ? 2 : 1; // 턴 전환
-        hud.log("--- Player " + currentPlayer + "의 턴입니다. ---");
-        hud.enableDiceButton(); // 주사위 버튼 다시 활성화
     }
-    
-    private void drawPlayerPositions() {
-        for (int y = 0; y < MAP_HEIGHT; y++) {
-            for (int x = 0; x < MAP_WIDTH; x++) {
-            	
-                updateButtonVisuals(y, x);
-                
-                boolean p1Here = (player1X == x && player1Y == y);
-                boolean p2Here = (player2X == x && player2Y == y);
 
-                if (p1Here && p2Here) {
-                    mapButtons[y][x].setText("P1 / P2");
-                } else if (p1Here) {
-                    mapButtons[y][x].setText("Player 1");
-                } else if (p2Here) {
-                    mapButtons[y][x].setText("Player 2");
+    // 내부 클래스: 맵 그리기 전용
+    class MapPanel extends JPanel {
+        private final int TILE_SIZE = 50;
+        
+        @Override
+        protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
+            if (gameState == null) return;
+
+            // 맵 그리기
+            for (int y = 0; y < 10; y++) {
+                for (int x = 0; x < 10; x++) {
+                    int type = gameState.map[y][x];
+                    if (type == 0) g.setColor(Color.LIGHT_GRAY);
+                    else if (type == 1) g.setColor(Color.CYAN);
+                    else g.setColor(Color.RED);
+                    
+                    g.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                    g.setColor(Color.GRAY);
+                    g.drawRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
                 }
             }
+            
+            // 플레이어 그리기
+            for (Player p : gameState.players) {
+                g.setColor(p.color);
+                g.fillOval(p.x * TILE_SIZE + 5, p.y * TILE_SIZE + 5, TILE_SIZE - 10, TILE_SIZE - 10);
+                
+                // 이름 (닉네임 수정 반영됨)
+                g.setColor(Color.BLACK);
+                g.setFont(new Font("SansSerif", Font.PLAIN, 10));
+                g.drawString(p.name, p.x * TILE_SIZE, p.y * TILE_SIZE);
+            }
         }
-    }
-
-    private void processTileEvent(int y, int x) {
-        TileType type = mapData[y][x];
-        hud.log("도착한 타일: " + type);
-
-        switch (type) {
-            case MONSTER:
-                battleSystem.startMonsterBattle(hud::log);
-                mapData[y][x] = TileType.BLANK;
-                break;
-            case BOSS:
-                battleSystem.startBossBattle(hud::log);
-                mapData[y][x] = TileType.BLANK;
-                break;
-            case SHOP:
-                shopManager.openShop(hud::log);
-                mapData[y][x] = TileType.BLANK;
-                break;
-            case TREASURE:
-                eventManager.startTreasure(hud::log);
-                mapData[y][x] = TileType.BLANK;
-                break;
-            case EVENT:
-                eventManager.startEvent(hud::log);
-                mapData[y][x] = TileType.BLANK;
-                break;
-            case BLANK:
-                hud.log("이 칸은 이미 탐험이 끝난 빈 칸입니다.");
-                break;
-            case PLAYER:
-                hud.log("시작 지점입니다.");
-                break;
-        }
-    }
-    
-    private boolean isValidMove(int currentX, int currentY, int targetX, int targetY, int diceRoll) {
-        int distance = Math.abs(targetX - currentX) + Math.abs(targetY - currentY);
-        return distance > 0 && distance <= diceRoll;
-    }
-
-    private void updateButtonVisuals(int y, int x) {
-        JButton button = mapButtons[y][x];
-        TileType type = mapData[y][x];
-        button.setText(type.name());
-        
-        switch (type) {
-            case PLAYER:   button.setBackground(Color.GREEN);   break;
-            case BOSS:     button.setBackground(Color.RED);     break;
-            case MONSTER:  button.setBackground(Color.ORANGE);  break;
-            case SHOP:     button.setBackground(Color.CYAN);    break;
-            case TREASURE: button.setBackground(Color.YELLOW);  break;
-            case EVENT:    button.setBackground(Color.MAGENTA); break;
-            case BLANK:
-                button.setText("Blank");
-                button.setBackground(Color.LIGHT_GRAY);
-                break;
-        }
-        button.setEnabled(true); 
     }
 }
