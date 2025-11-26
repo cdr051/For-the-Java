@@ -1,7 +1,6 @@
 package server;
 
-import client.Message; // shared 패키지로 빼도 됨
-
+import client.Message;
 import java.io.*;
 import java.net.Socket;
 
@@ -10,13 +9,15 @@ public class ClientHandler extends Thread {
     private GameServer server;
     private ObjectInputStream in;
     private ObjectOutputStream out;
-
     private String playerName;
+    private GameSession currentSession;
 
     public ClientHandler(Socket socket, GameServer server) {
         this.socket = socket;
         this.server = server;
     }
+
+    public void setGameSession(GameSession session) { this.currentSession = session; }
 
     @Override
     public void run() {
@@ -25,67 +26,35 @@ public class ClientHandler extends Thread {
             out.flush();
             in = new ObjectInputStream(socket.getInputStream());
 
-            // 첫 수신은 플레이어 이름
             Object first = in.readObject();
-            if (first instanceof String name) {
-                this.playerName = name;
-                System.out.println("[SERVER] 플레이어 접속: " + name);
-
-                // 서버 전체에 접속 알림
-                server.broadcast(
-                        new Message(Message.Type.PLAYER_JOIN, name)
-                );
-
-                // 모든 클라이언트에게 현재 참가자 목록 전달
-                server.broadcastPlayerList();
+            if (first instanceof String) {
+                this.playerName = (String) first;
+                System.out.println("[SERVER] 접속: " + playerName);
+                server.broadcast(new Message(Message.Type.PLAYER_JOIN, playerName));
+                server.addClient(this);
             }
 
-            // 메시지 처리 루프
             while (true) {
-                Object msg = in.readObject();
-
-                // 문자열이면 채팅
-                if (msg instanceof String s) {
-                    server.broadcast(
-                            new Message(Message.Type.CHAT, playerName + ": " + s)
-                    );
-                }
-
-                // Message 객체면 타입 분석
-                else if (msg instanceof Message m) {
-                    handleMessage(m);
+                Object obj = in.readObject();
+                if (obj instanceof Message msg) {
+                    if (msg.getType() == Message.Type.SUBMIT_TILE && currentSession != null) {
+                        currentSession.handleSubmission(this, (int) msg.getData());
+                    } else if (msg.getType() == Message.Type.REQUEST_PLAYER_LIST) {
+                        server.sendPlayerListToOne(this);
+                    }
+                } else if (obj instanceof String) {
+                    server.broadcast(new Message(Message.Type.CHAT, playerName + ": " + obj));
                 }
             }
-
         } catch (Exception e) {
-            System.out.println("[SERVER] " + playerName + " 연결 종료");
+            System.out.println("[SERVER] 종료: " + playerName);
         } finally {
             server.removeClient(this);
-            server.broadcastPlayerList();
-        }
-    }
-
-    private void handleMessage(Message msg) {
-        switch (msg.getType()) {
-
-            case REQUEST_PLAYER_LIST ->
-                    server.sendPlayerListToOne(this);
-
-            default ->
-                    System.out.println("[SERVER] Unknown message: " + msg.getType());
         }
     }
 
     public void send(Message msg) {
-        try {
-            out.writeObject(msg);
-            out.flush();
-        } catch (IOException e) {
-            System.out.println("[SERVER] 전송 오류");
-        }
+        try { out.writeObject(msg); out.flush(); } catch (IOException e) {}
     }
-
-    public String getPlayerName() {
-        return playerName;
-    }
+    public String getPlayerName() { return playerName; }
 }

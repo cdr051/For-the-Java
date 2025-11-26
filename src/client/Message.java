@@ -3,21 +3,21 @@ package client;
 import java.io.Serializable;
 
 public class Message implements Serializable {
+    private static final long serialVersionUID = 1L;
 
     public enum Type {
-        // 로비 관련
         PLAYER_JOIN,
         PLAYER_LIST,
         REQUEST_PLAYER_LIST,
-
-        // 채팅
         CHAT,
+        GAME_START,
+        YOUR_TURN,
+        SUBMIT_TILE, // 타일 제출
+        OPPONENT_SUBMITTED,
+        UPDATE_OPP_COUNTS, //상대 남은 패 갯수
 
-        // 게임 관련 기본 구조
-        PLAYER_MOVE,
-        TURN_CHANGE,
-        BATTLE_RESULT,
-        GAME_STATE
+        ROUND_RESULT,
+        GAME_OVER
     }
 
     private Type type;
@@ -28,11 +28,6 @@ public class Message implements Serializable {
         this.data = data;
     }
 
-    public Type getType() {
-        return type;
-    }
-
-    public Object getData() {
-        return data;
-    }
+    public Type getType() { return type; }
+    public Object getData() { return data; }
 }
