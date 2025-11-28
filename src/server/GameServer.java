@@ -1,16 +1,17 @@
 package server;
 
 import shared.*;
-import shared.Message.BattleRequest; // ⭐ [핵심] 이 줄이 있어야 에러가 안 납니다!
+import shared.Message.BattleRequest;
 import java.io.*;
 import java.net.*;
 import java.util.*;
 
 public class GameServer {
     private static final int PORT = 9999;
-    private static List<ObjectOutputStream> clients = new ArrayList<>();
     
-    // GameManager 인스턴스 생성
+    // 동기화 처리가 된 리스트로 변경 (충돌 방지 1단계)
+    private static List<ObjectOutputStream> clients = Collections.synchronizedList(new ArrayList<>());
+    
     private static GameManager gameManager = new GameManager(); 
 
     public static void main(String[] args) {
@@ -23,16 +24,26 @@ public class GameServer {
         } catch (IOException e) { e.printStackTrace(); }
     }
 
-    // 모든 클라이언트에게 메시지 전송
-    public static synchronized void broadcast(Message msg) {
-        for (ObjectOutputStream out : clients) {
-            try {
-                out.reset();
-                out.writeObject(msg);
-                out.flush();
-            } catch (IOException e) { 
-                // 연결 끊긴 클라이언트 처리 (간단히 무시)
+    // 모든 클라이언트에게 안전하게 메시지 전송 (충돌 방지 2단계)
+    public static void broadcast(Message msg) {
+        // 리스트를 쓰는 동안 다른 작업이 끼어들지 못하게 잠금(Lock)
+        synchronized (clients) {
+            for (ObjectOutputStream out : clients) {
+                try {
+                    out.reset();
+                    out.writeObject(msg);
+                    out.flush();
+                } catch (IOException e) { 
+                    // 전송 실패 시 처리는 개별 핸들러에게 맡김
+                }
             }
+        }
+    }
+
+    // 클라이언트 삭제 메서드 추출
+    public static void removeClient(ObjectOutputStream out) {
+        synchronized (clients) {
+            clients.remove(out);
         }
     }
 
@@ -51,12 +62,14 @@ public class GameServer {
                 out.flush();
                 in = new ObjectInputStream(socket.getInputStream());
                 
-                synchronized (clients) { clients.add(out); }
+                // 접속 시 리스트에 추가 (동기화)
+                clients.add(out);
 
                 // 1. 입장 및 로그인 처리
                 GameState currentState = gameManager.getGameState();
                 synchronized (currentState) {
                     int id = currentState.players.size();
+                    // ⭐ Player 생성자에 null 대신 기본 색상 등 안전값 부여
                     Player p = new Player(id, "Player " + (id + 1), java.awt.Color.BLUE);
                     if (id == 0) {
                         p.isHost = true;
@@ -68,7 +81,6 @@ public class GameServer {
                     out.writeObject(new Message(Message.Type.LOGIN, myId));
                 }
                 
-                // 로비 갱신 알림 (리스트 복사해서 전송)
                 broadcast(new Message(Message.Type.LOBBY_UPDATE, new ArrayList<>(currentState.players)));
                 broadcast(new Message(Message.Type.CHAT, "[시스템] Player " + (myId+1) + "님이 입장했습니다."));
 
@@ -76,7 +88,6 @@ public class GameServer {
                 while (true) {
                     Message msg = (Message) in.readObject();
                     
-                    // --- 로비 로직 ---
                     if (msg.type == Message.Type.SET_NAME) { 
                         gameManager.setPlayerName(myId, (String) msg.payload);
                         broadcast(new Message(Message.Type.LOBBY_UPDATE, new ArrayList<>(gameManager.getGameState().players)));
@@ -96,8 +107,6 @@ public class GameServer {
                     else if (msg.type == Message.Type.START_GAME) {
                         broadcast(new Message(Message.Type.START_GAME, gameManager.getGameState()));
                     }
-                    
-                    // --- 게임 플레이 로직 ---
                     else if (msg.type == Message.Type.ROLL_DICE) {
                         gameManager.rollDice(myId);
                         broadcast(new Message(Message.Type.STATE_UPDATE, gameManager.getGameState()));
@@ -111,18 +120,18 @@ public class GameServer {
                         gameManager.passTurn(myId);
                         broadcast(new Message(Message.Type.STATE_UPDATE, gameManager.getGameState()));
                     }
-                    
-                    // --- ⭐ 전투 로직 추가됨 ---
                     else if (msg.type == Message.Type.BATTLE_ACTION) {
-                        // 이제 import shared.Message.BattleRequest; 가 있어서 에러 안 남
                         BattleRequest req = (BattleRequest) msg.payload;
                         gameManager.processBattleAction(myId, req);
                         broadcast(new Message(Message.Type.STATE_UPDATE, gameManager.getGameState()));
                     }
                 }
             } catch (Exception e) {
-                System.out.println("Player " + myId + " 연결 종료");
-                clients.remove(out);
+                System.out.println("Player " + myId + " 연결 종료 (" + e.getMessage() + ")");
+            } finally {
+                // 안전하게 목록에서 제거
+                if (out != null) removeClient(out);
+                try { socket.close(); } catch (IOException e) {}
             }
         }
     }

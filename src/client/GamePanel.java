@@ -13,6 +13,7 @@ public class GamePanel extends JPanel {
     private MapPanel mapPanel;
     private JPanel sidePanel;
     private JLabel lblTurnInfo;
+    private JLabel lblGold; // 골드 라벨 추가
     private JLabel lblMyStatus;
     private JButton btnRoll;
     private JButton btnEndTurn;
@@ -36,6 +37,12 @@ public class GamePanel extends JPanel {
         lblTurnInfo.setFont(new Font("SansSerif", Font.BOLD, 16));
         lblTurnInfo.setAlignmentX(Component.CENTER_ALIGNMENT);
 
+        // 추가] 골드 UI 생성
+        lblGold = new JLabel("💰 0 G");
+        lblGold.setFont(new Font("SansSerif", Font.BOLD, 18));
+        lblGold.setForeground(new Color(218, 165, 32)); // 금색
+        lblGold.setAlignmentX(Component.CENTER_ALIGNMENT);
+
         lblMyStatus = new JLabel("-");
         lblMyStatus.setAlignmentX(Component.CENTER_ALIGNMENT);
 
@@ -48,7 +55,9 @@ public class GamePanel extends JPanel {
         btnEndTurn.addActionListener(e -> mainApp.send(new Message(Message.Type.TURN_PASS, null)));
         
         sidePanel.add(lblTurnInfo);
-        sidePanel.add(Box.createVerticalStrut(20));
+        sidePanel.add(Box.createVerticalStrut(15));
+        sidePanel.add(lblGold); // ⭐ 패널에 추가
+        sidePanel.add(Box.createVerticalStrut(15));
         sidePanel.add(lblMyStatus);
         sidePanel.add(Box.createVerticalStrut(20));
         sidePanel.add(btnRoll);
@@ -81,6 +90,9 @@ public class GamePanel extends JPanel {
         if (isMyTurn) lblTurnInfo.setForeground(Color.BLUE);
         else lblTurnInfo.setForeground(Color.BLACK);
 
+        // 골드 업데이트
+        lblGold.setText("💰 " + gameState.teamGold + " G");
+
         lblMyStatus.setText("<html>남은 이동력: <font color='red'>" + me.movePoints + "</font></html>");
         
         if (isMyTurn) {
@@ -93,7 +105,6 @@ public class GamePanel extends JPanel {
     }
 
     class MapPanel extends JPanel {
-        // 타일 크기를 조금 키워도 좋습니다 (예: 50 -> 60)
         private final int TILE_SIZE = 60; 
         
         @Override
@@ -101,16 +112,13 @@ public class GamePanel extends JPanel {
             super.paintComponent(g);
             if (gameState == null) return;
 
-            // ⭐ [핵심] 화면 중앙 정렬 계산
-            // 전체 맵의 픽셀 크기 계산
+            // 화면 중앙 정렬
             int mapPixelWidth = GameState.MAP_WIDTH * TILE_SIZE;
             int mapPixelHeight = GameState.MAP_HEIGHT * TILE_SIZE;
             
-            // 현재 패널의 중앙 좌표 계산
             int startX = (getWidth() - mapPixelWidth) / 2;
             int startY = (getHeight() - mapPixelHeight) / 2;
 
-            // 좌표 이동 (Translate) - 이제부터 (0,0)에 그리면 startX, startY에 그려짐
             g.translate(startX, startY);
 
             // 맵 그리기
@@ -134,11 +142,9 @@ public class GamePanel extends JPanel {
                 
                 g.setColor(Color.BLACK);
                 g.setFont(new Font("SansSerif", Font.BOLD, 12));
-                // 이름 위치 보정
                 g.drawString(p.name, p.x * TILE_SIZE, p.y * TILE_SIZE);
             }
             
-            // 좌표 복구 (필수는 아니지만 관례상)
             g.translate(-startX, -startY);
         }
     }
