@@ -25,10 +25,10 @@ public class ClientApp extends JFrame {
     private LobbyPanel lobbyPanel;
     private GamePanel gamePanel;
     private BattlePanel battlePanel;
+    private ShopPanel shopPanel;
 
     public ClientApp() {
         setTitle("For The King - 접속 중...");
-        // ⭐ [수정] 창 모드이면서 화면 최대화 설정
         setExtendedState(JFrame.MAXIMIZED_BOTH); 
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
@@ -38,10 +38,12 @@ public class ClientApp extends JFrame {
         lobbyPanel = new LobbyPanel(this);
         gamePanel = new GamePanel(this);
         battlePanel = new BattlePanel(this);
+        shopPanel = new ShopPanel(this); 
 
         mainContainer.add(lobbyPanel, "LOBBY");
         mainContainer.add(gamePanel, "GAME");
         mainContainer.add(battlePanel, "BATTLE");
+        mainContainer.add(shopPanel, "SHOP"); 
 
         add(mainContainer);
 
@@ -127,10 +129,17 @@ public class ClientApp extends JFrame {
                         case STATE_UPDATE:
                             GameState state = (GameState) msg.payload;
                             SwingUtilities.invokeLater(() -> {
+                                // ⭐ [여기가 핵심] 데이터를 받으면 상점 UI에도 알려줘야 합니다!
+                                shopPanel.updateState(state);
+
                                 if (state.isBattleMode) {
                                     battlePanel.updateState(state);
                                     cardLayout.show(mainContainer, "BATTLE");
-                                } else {
+                                } 
+                                else if (state.isShopMode) {
+                                    cardLayout.show(mainContainer, "SHOP");
+                                }
+                                else {
                                     gamePanel.updateState(state);
                                     cardLayout.show(mainContainer, "GAME");
                                     mainContainer.requestFocusInWindow(); 
@@ -155,9 +164,7 @@ public class ClientApp extends JFrame {
                 out.writeObject(msg);
                 out.flush();
             }
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        } catch (IOException e) { e.printStackTrace(); }
     }
 
     public int getMyId() { return myId; }

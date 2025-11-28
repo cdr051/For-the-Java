@@ -7,15 +7,14 @@ public class Message implements Serializable {
     public enum Type {
         LOGIN, SET_NAME, LOBBY_UPDATE, CHAT, CHANGE_JOB, READY, START_GAME,
         STATE_UPDATE, ROLL_DICE, MOVE_REQ, TURN_PASS,
+        BATTLE_ACTION,
         
-        // ⭐ [추가] 전투 관련 메시지
-        BATTLE_ACTION // 공격, 스킬, 도망 등
+        SHOP_EXIT,SHOP_BUY 
     }
     
-    // 전투 액션 상세 정보 (어떤 행동을 했는지)
     public static class BattleRequest implements Serializable {
-        public String action; // "ATTACK", "SKILL1", "SKILL2", "FLEE"
-        public int targetIndex; // 몬스터 인덱스 (단일 공격용)
+        public String action; 
+        public int targetIndex; 
         
         public BattleRequest(String action, int targetIndex) {
             this.action = action;
@@ -24,7 +23,7 @@ public class Message implements Serializable {
     }
 
     public Type type;
-    public Object payload;
+    public Object payload; // SHOP_BUY일 때 "ATK" 또는 "HP" 문자열 전송
 
     public Message(Type type, Object payload) {
         this.type = type;

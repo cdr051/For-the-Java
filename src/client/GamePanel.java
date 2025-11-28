@@ -9,11 +9,11 @@ public class GamePanel extends JPanel {
     private ClientApp mainApp;
     private GameState gameState;
     
-    // UI 컴포넌트
     private MapPanel mapPanel;
     private JPanel sidePanel;
     private JLabel lblTurnInfo;
-    private JLabel lblGold; // 골드 라벨 추가
+    private JLabel lblGold; 
+    private JLabel lblStats;
     private JLabel lblMyStatus;
     private JButton btnRoll;
     private JButton btnEndTurn;
@@ -22,14 +22,12 @@ public class GamePanel extends JPanel {
         this.mainApp = app;
         setLayout(new BorderLayout());
 
-        // 1. 맵 패널 (중앙)
         mapPanel = new MapPanel();
         add(mapPanel, BorderLayout.CENTER);
 
-        // 2. 사이드 패널 (우측)
         sidePanel = new JPanel();
         sidePanel.setLayout(new BoxLayout(sidePanel, BoxLayout.Y_AXIS));
-        sidePanel.setPreferredSize(new Dimension(200, 0));
+        sidePanel.setPreferredSize(new Dimension(220, 0)); // 너비 살짝 키움
         sidePanel.setBorder(new EmptyBorder(10, 10, 10, 10));
         sidePanel.setBackground(new Color(230, 230, 230));
 
@@ -37,11 +35,15 @@ public class GamePanel extends JPanel {
         lblTurnInfo.setFont(new Font("SansSerif", Font.BOLD, 16));
         lblTurnInfo.setAlignmentX(Component.CENTER_ALIGNMENT);
 
-        // 추가] 골드 UI 생성
         lblGold = new JLabel("💰 0 G");
-        lblGold.setFont(new Font("SansSerif", Font.BOLD, 18));
-        lblGold.setForeground(new Color(218, 165, 32)); // 금색
+        lblGold.setFont(new Font("SansSerif", Font.BOLD, 20)); // 폰트 키움
+        lblGold.setForeground(new Color(218, 165, 32)); 
         lblGold.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        // 스탯 라벨 설정
+        lblStats = new JLabel("⚔️ - | ❤️ -/-");
+        lblStats.setFont(new Font("SansSerif", Font.BOLD, 14));
+        lblStats.setAlignmentX(Component.CENTER_ALIGNMENT);
 
         lblMyStatus = new JLabel("-");
         lblMyStatus.setAlignmentX(Component.CENTER_ALIGNMENT);
@@ -55,9 +57,11 @@ public class GamePanel extends JPanel {
         btnEndTurn.addActionListener(e -> mainApp.send(new Message(Message.Type.TURN_PASS, null)));
         
         sidePanel.add(lblTurnInfo);
-        sidePanel.add(Box.createVerticalStrut(15));
-        sidePanel.add(lblGold); // ⭐ 패널에 추가
-        sidePanel.add(Box.createVerticalStrut(15));
+        sidePanel.add(Box.createVerticalStrut(20));
+        sidePanel.add(lblGold); 
+        sidePanel.add(Box.createVerticalStrut(10));
+        sidePanel.add(lblStats); // ⭐ 패널 추가
+        sidePanel.add(Box.createVerticalStrut(20));
         sidePanel.add(lblMyStatus);
         sidePanel.add(Box.createVerticalStrut(20));
         sidePanel.add(btnRoll);
@@ -90,8 +94,10 @@ public class GamePanel extends JPanel {
         if (isMyTurn) lblTurnInfo.setForeground(Color.BLUE);
         else lblTurnInfo.setForeground(Color.BLACK);
 
-        // 골드 업데이트
         lblGold.setText("💰 " + gameState.teamGold + " G");
+
+        // 내 스탯 실시간 업데이트
+        lblStats.setText(String.format("⚔️ %d  |  ❤️ %d/%d", me.attack, me.hp, me.maxHp));
 
         lblMyStatus.setText("<html>남은 이동력: <font color='red'>" + me.movePoints + "</font></html>");
         
@@ -112,39 +118,39 @@ public class GamePanel extends JPanel {
             super.paintComponent(g);
             if (gameState == null) return;
 
-            // 화면 중앙 정렬
             int mapPixelWidth = GameState.MAP_WIDTH * TILE_SIZE;
             int mapPixelHeight = GameState.MAP_HEIGHT * TILE_SIZE;
-            
             int startX = (getWidth() - mapPixelWidth) / 2;
             int startY = (getHeight() - mapPixelHeight) / 2;
 
             g.translate(startX, startY);
 
-            // 맵 그리기
             for (int y = 0; y < GameState.MAP_HEIGHT; y++) {
                 for (int x = 0; x < GameState.MAP_WIDTH; x++) {
                     int type = gameState.map[y][x];
                     if (type == 0) g.setColor(Color.LIGHT_GRAY);
                     else if (type == 1) g.setColor(Color.CYAN);
-                    else g.setColor(Color.RED);
+                    else if (type == 2) g.setColor(Color.RED);
+                    else if (type == 3) g.setColor(Color.ORANGE);
                     
                     g.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
                     g.setColor(Color.GRAY);
                     g.drawRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+
+                    if (type == 3) {
+                        g.setColor(Color.BLACK);
+                        g.drawString("SHOP", x * TILE_SIZE + 10, y * TILE_SIZE + 35);
+                    }
                 }
             }
             
-            // 플레이어 그리기
             for (Player p : gameState.players) {
                 g.setColor(p.color);
                 g.fillOval(p.x * TILE_SIZE + 5, p.y * TILE_SIZE + 5, TILE_SIZE - 10, TILE_SIZE - 10);
-                
                 g.setColor(Color.BLACK);
                 g.setFont(new Font("SansSerif", Font.BOLD, 12));
                 g.drawString(p.name, p.x * TILE_SIZE, p.y * TILE_SIZE);
             }
-            
             g.translate(-startX, -startY);
         }
     }

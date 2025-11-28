@@ -8,10 +8,7 @@ import java.util.*;
 
 public class GameServer {
     private static final int PORT = 9999;
-    
-    // 동기화 처리가 된 리스트로 변경 (충돌 방지 1단계)
     private static List<ObjectOutputStream> clients = Collections.synchronizedList(new ArrayList<>());
-    
     private static GameManager gameManager = new GameManager(); 
 
     public static void main(String[] args) {
@@ -24,27 +21,20 @@ public class GameServer {
         } catch (IOException e) { e.printStackTrace(); }
     }
 
-    // 모든 클라이언트에게 안전하게 메시지 전송 (충돌 방지 2단계)
     public static void broadcast(Message msg) {
-        // 리스트를 쓰는 동안 다른 작업이 끼어들지 못하게 잠금(Lock)
         synchronized (clients) {
             for (ObjectOutputStream out : clients) {
                 try {
                     out.reset();
                     out.writeObject(msg);
                     out.flush();
-                } catch (IOException e) { 
-                    // 전송 실패 시 처리는 개별 핸들러에게 맡김
-                }
+                } catch (IOException e) {}
             }
         }
     }
 
-    // 클라이언트 삭제 메서드 추출
     public static void removeClient(ObjectOutputStream out) {
-        synchronized (clients) {
-            clients.remove(out);
-        }
+        synchronized (clients) { clients.remove(out); }
     }
 
     static class ClientHandler extends Thread {
@@ -62,29 +52,21 @@ public class GameServer {
                 out.flush();
                 in = new ObjectInputStream(socket.getInputStream());
                 
-                // 접속 시 리스트에 추가 (동기화)
                 clients.add(out);
 
-                // 1. 입장 및 로그인 처리
                 GameState currentState = gameManager.getGameState();
                 synchronized (currentState) {
                     int id = currentState.players.size();
-                    // ⭐ Player 생성자에 null 대신 기본 색상 등 안전값 부여
                     Player p = new Player(id, "Player " + (id + 1), java.awt.Color.BLUE);
-                    if (id == 0) {
-                        p.isHost = true;
-                        p.isReady = true; 
-                    }
+                    if (id == 0) { p.isHost = true; p.isReady = true; }
                     currentState.players.add(p);
                     myId = id;
-                    
                     out.writeObject(new Message(Message.Type.LOGIN, myId));
                 }
                 
                 broadcast(new Message(Message.Type.LOBBY_UPDATE, new ArrayList<>(currentState.players)));
                 broadcast(new Message(Message.Type.CHAT, "[시스템] Player " + (myId+1) + "님이 입장했습니다."));
 
-                // 2. 메시지 수신 루프
                 while (true) {
                     Message msg = (Message) in.readObject();
                     
@@ -92,9 +74,7 @@ public class GameServer {
                         gameManager.setPlayerName(myId, (String) msg.payload);
                         broadcast(new Message(Message.Type.LOBBY_UPDATE, new ArrayList<>(gameManager.getGameState().players)));
                     }
-                    else if (msg.type == Message.Type.CHAT) {
-                        broadcast(msg);
-                    } 
+                    else if (msg.type == Message.Type.CHAT) { broadcast(msg); } 
                     else if (msg.type == Message.Type.CHANGE_JOB) {
                         gameManager.getGameState().players.get(myId).jobClass = (String) msg.payload;
                         broadcast(new Message(Message.Type.LOBBY_UPDATE, new ArrayList<>(gameManager.getGameState().players)));
@@ -125,11 +105,21 @@ public class GameServer {
                         gameManager.processBattleAction(myId, req);
                         broadcast(new Message(Message.Type.STATE_UPDATE, gameManager.getGameState()));
                     }
+                    // 상점 나가기 메시지 처리
+                    else if (msg.type == Message.Type.SHOP_EXIT) {
+                        gameManager.exitShop(myId);
+                        broadcast(new Message(Message.Type.STATE_UPDATE, gameManager.getGameState()));
+                    }
+                    // 구매요청 처리
+                    else if (msg.type == Message.Type.SHOP_BUY) {
+                        String itemCode = (String) msg.payload; // "ATK" or "HP"
+                        gameManager.buyItem(myId, itemCode); // GameManager에 위임
+                        broadcast(new Message(Message.Type.STATE_UPDATE, gameManager.getGameState()));
+                    }
                 }
             } catch (Exception e) {
-                System.out.println("Player " + myId + " 연결 종료 (" + e.getMessage() + ")");
+                System.out.println("Player " + myId + " 연결 종료");
             } finally {
-                // 안전하게 목록에서 제거
                 if (out != null) removeClient(out);
                 try { socket.close(); } catch (IOException e) {}
             }

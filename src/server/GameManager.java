@@ -6,14 +6,15 @@ import shared.Message.BattleRequest;
 public class GameManager {
     private GameState gameState = new GameState();
     
-    // 리팩토링
+    // 매니저들
     private MapManager mapManager;
     private BattleManager battleManager;
+    private ShopManager shopManager; // 상점 매니저
 
     public GameManager() {
-        // 매니저 초기화 및 의존성 주입
         this.mapManager = new MapManager(gameState);
         this.battleManager = new BattleManager(gameState, this);
+        this.shopManager = new ShopManager(gameState); // 매니저 초기화
     }
 
     public synchronized GameState getGameState() { return gameState; }
@@ -24,32 +25,44 @@ public class GameManager {
         }
     }
 
-    // 주사위 요청 -> MapManager에게 위임
     public synchronized void rollDice(int playerId) {
-        if (gameState.isBattleMode) return;
+        if (gameState.isBattleMode || gameState.isShopMode) return;
         if (gameState.currentTurnPlayerId != playerId) return;
         
         mapManager.rollDice(playerId);
     }
 
-    // 이동 요청 -> MapManager 위임 후 전투 체크
     public synchronized void movePlayer(int playerId, int dx, int dy) {
-        if (gameState.isBattleMode) return;
+        if (gameState.isBattleMode || gameState.isShopMode) return;
         if (gameState.currentTurnPlayerId != playerId) return;
         
-        // 이동 시도
         boolean moved = mapManager.movePlayer(playerId, dx, dy);
         
         if (moved) {
             Player p = gameState.players.get(playerId);
-            // 몬스터 타일(2)인지 체크 -> 전투 시작
-            if (gameState.map[p.y][p.x] == 2) {
+            int tileType = gameState.map[p.y][p.x];
+            
+            if (tileType == 2) { // 몬스터
                 battleManager.initiateBattle(p, p.x, p.y);
+            } 
+            else if (tileType == 3) { // 상점
+                shopManager.openShop(p);
             }
         }
     }
 
-    // 전투 요청 -> BattleManager에게 위임
+    // 상점 나가기
+    public synchronized void exitShop(int playerId) {
+        if (!gameState.isShopMode) return;
+        shopManager.exitShop(playerId);
+    }
+
+    // ⭐ [6번 내용] 구매 요청 처리 (여기에 추가됨)
+    public synchronized void buyItem(int playerId, String itemCode) {
+        if (!gameState.isShopMode) return;
+        shopManager.buyItem(playerId, itemCode);
+    }
+
     public synchronized void processBattleAction(int playerId, BattleRequest req) {
         if (!gameState.isBattleMode) return;
         if (gameState.currentTurnPlayerId != playerId) return;
@@ -57,7 +70,6 @@ public class GameManager {
         battleManager.processBattleAction(playerId, req);
     }
 
-    // 턴 넘기기 (중앙 관리 유지)
     public synchronized void passTurn(int playerId) {
         if (gameState.currentTurnPlayerId != playerId) return;
         
@@ -66,7 +78,6 @@ public class GameManager {
         currentP.hasRolled = false;
 
         if (gameState.isBattleMode) {
-            // 전투 중 턴 순환
             int currentIndexInList = gameState.battleMemberIds.indexOf(playerId);
             if (currentIndexInList == -1) {
                 gameState.currentTurnPlayerId = gameState.battleMemberIds.get(0);
@@ -74,12 +85,10 @@ public class GameManager {
                 int nextIndexInList = (currentIndexInList + 1) % gameState.battleMemberIds.size();
                 gameState.currentTurnPlayerId = gameState.battleMemberIds.get(nextIndexInList);
             }
-            
             Player nextP = gameState.players.get(gameState.currentTurnPlayerId);
             gameState.logMessage = String.format("⚔️ [전투] %s님의 차례입니다.", nextP.name);
         } 
         else {
-            // 맵 이동 중 턴 순환
             int nextId = (gameState.currentTurnPlayerId + 1) % gameState.players.size();
             gameState.currentTurnPlayerId = nextId;
             

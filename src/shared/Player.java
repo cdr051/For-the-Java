@@ -8,27 +8,34 @@ public class Player implements Serializable {
     public int id;
     public String name;
     public int x, y;
-    public int hp;
     public Color color;
     public String jobClass;
     public boolean isHost;
     public boolean isReady;
     public int movePoints = 0; 
-    
-    // ⭐ [추가] 이번 턴에 주사위를 굴렸는지 체크하는 변수
     public boolean hasRolled = false;
+
+    // 능력치 변수 추가
+    public int hp;
+    public int maxHp;  // 최대 체력
+    public int attack; // 공격력
 
     public Player(int id, String name, Color color) {
         this.id = id;
         this.name = name;
         this.color = color;
+        
+        // 초기 능력치 설정
+        this.maxHp = 100;
         this.hp = 100;
+        this.attack = 10; // 기본 공격력 10
+        
         this.x = 0; 
         this.y = 0;
         this.jobClass = "기사";
         this.isHost = false;
         this.isReady = false;
         this.movePoints = 0;
-        this.hasRolled = false; // 초기화
+        this.hasRolled = false;
     }
 }
