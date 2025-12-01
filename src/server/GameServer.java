@@ -84,10 +84,13 @@ public class GameServer {
                     else if (msg.type == Message.Type.CHAT) {
                         broadcast(msg);
                     } 
+                 // ... while 문 내부
                     else if (msg.type == Message.Type.CHANGE_JOB) {
-                        gameManager.getGameState().players.get(myId).jobClass = (String) msg.payload;
+                        String job = (String) msg.payload;
+                        gameManager.changeJob(myId, job); // ⭐ GameManager에 위임해야 스탯이 바뀝니다.
                         broadcast(new Message(Message.Type.LOBBY_UPDATE, new ArrayList<>(gameManager.getGameState().players)));
                     }
+                    // ...
                     else if (msg.type == Message.Type.READY) {
                         boolean ready = (boolean) msg.payload;
                         gameManager.getGameState().players.get(myId).isReady = ready;

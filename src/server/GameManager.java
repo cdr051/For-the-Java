@@ -1,267 +1,265 @@
 package server;
 
 import shared.*;
-import shared.Message.BattleRequest; // BattleRequest 사용을 위해 import
+import shared.Message.BattleRequest;
 import java.util.*;
 
 public class GameManager {
     private GameState gameState = new GameState();
 
-    // 전투가 발생한 맵 좌표를 기억하기 위한 변수
+    // 전투가 발생한 맵 좌표 저장
     private int battleTileX = -1;
     private int battleTileY = -1;
 
     public synchronized GameState getGameState() { return gameState; }
 
-    // 닉네임 설정
     public synchronized void setPlayerName(int id, String name) {
         if (id >= 0 && id < gameState.players.size()) {
             gameState.players.get(id).name = name;
         }
     }
 
-    // 🎲 주사위 굴리기 (턴당 1회 제한 적용)
-    public synchronized void rollDice(int playerId) {
-        // 전투 중에는 주사위 금지
-        if (gameState.isBattleMode) return;
-        // 내 턴인지 확인
-        if (gameState.currentTurnPlayerId != playerId) return;
-        
-        Player p = gameState.players.get(playerId);
-        
-        // ⭐ [핵심] 이번 턴에 이미 굴렸다면 거절
-        if (p.hasRolled) {
-            gameState.logMessage = "🚫 이미 주사위를 굴렸습니다. 이동하거나 턴을 넘기세요.";
-            return;
+    public synchronized void changeJob(int playerId, String jobName) {
+        if (playerId < gameState.players.size()) {
+            Player p = gameState.players.get(playerId);
+            p.jobClass = jobName;
+            p.updateStatsByJob(); 
         }
-
-        // 혹시 이동력이 남아있다면 거절 (중복 방지)
-        if (p.movePoints > 0) return; 
-
-        Random rand = new Random();
-        int dice = rand.nextInt(6) + 1; // 1~6
-        
-        p.movePoints = dice;
-        p.hasRolled = true; // ⭐ 굴림 처리 완료 (passTurn에서 초기화됨)
-        
-        gameState.logMessage = String.format("🎲 %s 주사위 결과: %d", p.name, dice);
     }
 
-    // 🏃 플레이어 이동
+    // 주사위 굴리기
+    public synchronized void rollDice(int playerId) {
+        if (gameState.isBattleMode) return;
+        if (gameState.currentTurnPlayerId != playerId) return;
+        Player p = gameState.players.get(playerId);
+        if (p.hasRolled || p.movePoints > 0) return; 
+
+        p.movePoints = new Random().nextInt(6) + 1;
+        p.hasRolled = true;
+        gameState.logMessage = String.format("🎲 %s 주사위 결과: %d", p.name, p.movePoints);
+    }
+
+    // 플레이어 이동
     public synchronized void movePlayer(int playerId, int dx, int dy) {
-        if (gameState.isBattleMode) return; // 전투 중 이동 불가
+        if (gameState.isBattleMode) return;
         if (gameState.currentTurnPlayerId != playerId) return;
         
         Player p = gameState.players.get(playerId);
-
-        // 이동력 체크
-        if (p.movePoints <= 0) {
-            gameState.logMessage = "🚫 이동력이 부족합니다!";
-            return;
-        }
+        if (p.movePoints <= 0) { gameState.logMessage = "🚫 이동력이 부족합니다!"; return; }
 
         int newX = p.x + dx;
         int newY = p.y + dy;
-
-        // 맵 범위 체크
         if (newX < 0 || newX >= 10 || newY < 0 || newY >= 10) return;
-        
-        // 물(1) 체크
-        if (gameState.map[newY][newX] == 1) {
-            gameState.logMessage = "🌊 물에는 들어갈 수 없습니다.";
-            return; 
-        }
+        if (gameState.map[newY][newX] == 1) { gameState.logMessage = "🌊 물 불가"; return; }
 
-        // 이동 수행
-        p.x = newX;
-        p.y = newY;
-        p.movePoints--;
+        p.x = newX; p.y = newY; p.movePoints--;
 
-        // 🔴 몬스터 타일(2) 체크 -> 전투 시작!
         if (gameState.map[newY][newX] == 2) {
-            initiateBattle(p, newX, newY); // 좌표 전달
-        } else {
-            // 일반 이동 로그 (너무 시끄러우면 주석 처리 가능)
-            // gameState.logMessage = String.format("🏃 %s 이동함 (%d, %d)", p.name, newX, newY);
+            initiateBattle(p, newX, newY);
         }
     }
 
-    // ⚔️ 전투 시작 로직
+    // 로그 쌓기
+    private void addBattleLog(String msg) {
+        gameState.battleLog.add(msg);
+        gameState.logMessage = msg; 
+    }
+
+    // ⚔️ 전투 시작 (⭐ 몬스터 스케일링 적용됨)
     private void initiateBattle(Player triggerPlayer, int x, int y) {
-        // 전투가 일어난 좌표 저장 (승리 시 지우기 위해)
         this.battleTileX = x;
         this.battleTileY = y;
         
         gameState.isBattleMode = true;
         gameState.battleMemberIds.clear();
         gameState.monsters.clear();
+        gameState.battleOrder.clear();
+        gameState.battleLog.clear(); 
 
-        List<String> partyNames = new ArrayList<>();
+        // 1. 참여자 선정
+        List<Player> participants = new ArrayList<>();
+        participants.add(triggerPlayer);
         
-        // 1. 전투 멤버 결성 (트리거한 사람 + 주변 2칸)
-        gameState.battleMemberIds.add(triggerPlayer.id);
-        partyNames.add(triggerPlayer.name);
-
         for (Player other : gameState.players) {
             if (other.id == triggerPlayer.id) continue;
-            
-            // 거리 계산 (대각선도 1칸으로 치는 체비쇼프 거리)
             int dist = Math.max(Math.abs(triggerPlayer.x - other.x), Math.abs(triggerPlayer.y - other.y));
-            if (dist <= 2) {
-                gameState.battleMemberIds.add(other.id);
-                partyNames.add(other.name);
-            }
+            if (dist <= 2) participants.add(other);
         }
 
-        // 2. 몬스터 생성 (고정 2마리)
-        gameState.monsters.add(new Monster(0, "고블린", 50));
-        gameState.monsters.add(new Monster(1, "오크", 80));
+        // 2. 플레이어 등록
+        for (Player p : participants) {
+            gameState.battleMemberIds.add(p.id);
+            p.updateStatsByJob(); 
+            gameState.battleOrder.add(new BattleUnit(false, p.id, p.name, p.getTotalSpeed()));
+        }
 
-        gameState.logMessage = String.format("⚔️ 몬스터 발견! 파티: %s", String.join(", ", partyNames));
+        // 3. ⭐ [핵심] 몬스터 생성 및 스케일링 (라운드 비례 강해짐)
+        int r = gameState.roundNumber; // 현재 라운드
+        
+        // 고블린: 기본 체력 30 + (라운드당 10), 공격력 5 + (라운드당 2)
+        int gobHp = 30 + (r * 10);
+        int gobAtk = 5 + (r * 2);
+        Monster m1 = new Monster(0, "고블린 (Lv."+r+")", gobHp, gobAtk, 12);
+
+        // 오크: 기본 체력 50 + (라운드당 15), 공격력 15 + (라운드당 3)
+        int orcHp = 50 + (r * 15);
+        int orcAtk = 15 + (r * 3);
+        Monster m2 = new Monster(1, "오크 (Lv."+r+")", orcHp, orcAtk, 3);
+
+        gameState.monsters.add(m1);
+        gameState.monsters.add(m2);
+
+        gameState.battleOrder.add(new BattleUnit(true, 0, m1.name, m1.speed));
+        gameState.battleOrder.add(new BattleUnit(true, 1, m2.name, m2.speed));
+        Collections.sort(gameState.battleOrder);
+
+        addBattleLog("⚔️ 전투 개시! (현재 라운드: " + r + ")");
+        addBattleLog(String.format("⚠️ 몬스터가 강해졌습니다! (HP 증가, 공격력 증가)"));
+
+        gameState.battleTurnIndex = -1;
+        processNextBattleTurn();
     }
 
-    // 👊 전투 행동 처리 (공격, 스킬, 도망)
+    // 전투 턴 진행
+    private void processNextBattleTurn() {
+        if (!gameState.isBattleMode) return;
+
+        gameState.battleTurnIndex = (gameState.battleTurnIndex + 1) % gameState.battleOrder.size();
+        BattleUnit currentUnit = gameState.battleOrder.get(gameState.battleTurnIndex);
+
+        if (isUnitDead(currentUnit)) {
+            processNextBattleTurn();
+            return;
+        }
+
+        if (currentUnit.isMonster) {
+            monsterAttackLogic(currentUnit.id);
+            if (gameState.isBattleMode) processNextBattleTurn(); 
+        } else {
+            gameState.currentTurnPlayerId = currentUnit.id;
+        }
+    }
+
+    private boolean isUnitDead(BattleUnit unit) {
+        if (unit.isMonster) return gameState.monsters.get(unit.id).isDead;
+        else return gameState.players.get(unit.id).hp <= 0;
+    }
+
+    // 몬스터 공격
+    private void monsterAttackLogic(int monsterIdx) {
+        Monster m = gameState.monsters.get(monsterIdx);
+        if (m.isDead) return;
+
+        List<Player> livePlayers = new ArrayList<>();
+        for (int pid : gameState.battleMemberIds) {
+            Player p = gameState.players.get(pid);
+            if (p.hp > 0) livePlayers.add(p);
+        }
+
+        if (!livePlayers.isEmpty()) {
+            Player target = livePlayers.get(new Random().nextInt(livePlayers.size()));
+            target.hp -= m.attack;
+            addBattleLog(String.format("👹 %s의 공격! -> %s(%s) [%d 피해]", 
+                    m.name, target.name, target.jobClass, m.attack));
+        }
+    }
+
+    // 플레이어 행동 처리
     public synchronized void processBattleAction(int playerId, BattleRequest req) {
         if (!gameState.isBattleMode) return;
-        if (gameState.currentTurnPlayerId != playerId) return;
-
-        // ⭐ [버그 수정] 전투 멤버가 아니면 행동 불가 (원격 개입 차단)
-        if (!gameState.battleMemberIds.contains(playerId)) {
-            return; 
-        }
+        BattleUnit currentUnit = gameState.battleOrder.get(gameState.battleTurnIndex);
+        if (currentUnit.isMonster || currentUnit.id != playerId) return;
 
         Player p = gameState.players.get(playerId);
         
-        // 1. 도망가기 (FLEE)
         if ("FLEE".equals(req.action)) {
-            if (Math.random() < 0.5) { // 50% 확률
-                endBattle(true); // 도망 성공 시 전투 종료 (맵으로 복귀)
-                gameState.logMessage = "💨 " + p.name + " 파티가 도망에 성공했습니다!";
-                // 도망 후 턴 넘기기
-                passTurn(playerId); 
+            if (Math.random() < 0.5) {
+                endBattle(true);
+                gameState.logMessage = String.format("💨 %s 파티 도망 성공!", p.name); 
+                passTurn(playerId);
                 return;
             } else {
-                gameState.logMessage = "🚫 도망 실패! 몬스터에게 잡혔습니다.";
+                addBattleLog(String.format("🚫 %s 도망 실패!", p.name));
             }
-        }
-        // 2. 공격 및 스킬
-        else {
-            int damage = 0;
-            boolean isAoE = false;
-            String skillName = "공격";
+        } else {
+            int finalAttack = p.getTotalAttack();
+            int damage = finalAttack;
+            String skillName = "기본 공격";
 
-            if ("ATTACK".equals(req.action)) damage = 15;
-            else if ("SKILL1".equals(req.action)) { damage = 25; skillName = "강타"; }
-            else if ("SKILL2".equals(req.action)) { damage = 10; isAoE = true; skillName = "광역기"; }
+            if ("SKILL1".equals(req.action)) { damage = (int)(finalAttack * 1.5); skillName = "강타"; }
+            else if ("SKILL2".equals(req.action)) { damage = (int)(finalAttack * 0.8); skillName = "광역기"; }
 
-            // 데미지 적용
-            if (isAoE) {
+            if ("SKILL2".equals(req.action)) {
                 for(Monster m : gameState.monsters) { if(!m.isDead) m.hp -= damage; }
-                gameState.logMessage = String.format("💥 [%s] %s! (광역 %d 피해)", p.name, skillName, damage);
+                addBattleLog(String.format("💥 %s(%s)의 %s! (적 전체 %d 피해)", p.name, p.jobClass, skillName, damage));
             } else {
                 if (req.targetIndex >= 0 && req.targetIndex < gameState.monsters.size()) {
                     Monster target = gameState.monsters.get(req.targetIndex);
                     if (!target.isDead) {
                         target.hp -= damage;
-                        gameState.logMessage = String.format("⚔️ [%s] %s -> %s (%d 피해)", p.name, skillName, target.name, damage);
+                        addBattleLog(String.format("⚔️ %s(%s)의 %s! -> %s [%d 피해]", p.name, p.jobClass, skillName, target.name, damage));
                     }
                 }
             }
         }
 
-        // 몬스터 사망 처리
         checkMonsterDeath();
-        
-        // 승리 체크
         if (gameState.monsters.stream().allMatch(m -> m.isDead)) {
             endBattle(true);
             return;
         }
-
-        // 몬스터 반격
-        monsterCounterAttack();
-        
-        // 턴 넘기기
-        passTurn(playerId);
+        processNextBattleTurn();
     }
 
-    private void monsterCounterAttack() {
-        for (Monster m : gameState.monsters) {
-            if (m.isDead) continue;
-            if (!gameState.battleMemberIds.isEmpty()) {
-                // 랜덤 타겟 공격
-                int targetId = gameState.battleMemberIds.get(new Random().nextInt(gameState.battleMemberIds.size()));
-                Player target = gameState.players.get(targetId);
-                
-                int dmg = 5 + new Random().nextInt(6); // 5~10
-                target.hp -= dmg;
-                gameState.logMessage += String.format(" / 👹 %s 반격 -> %s (%d)", m.name, target.name, dmg);
-            }
-        }
-    }
-    
     private void checkMonsterDeath() {
         for(Monster m : gameState.monsters) {
             if (!m.isDead && m.hp <= 0) {
                 m.isDead = true; m.hp = 0;
+                addBattleLog(String.format("☠️ %s 처치!", m.name));
             }
         }
     }
 
-    // 전투 종료 처리
     private void endBattle(boolean win) {
         gameState.isBattleMode = false;
-        
-        // ⭐ [버그 수정] 승리 시 해당 타일을 평지(0)로 변경
-        if (win && battleTileX != -1 && battleTileY != -1) {
+        if (win && battleTileX != -1) {
+            for(int pid : gameState.battleMemberIds) {
+                Player p = gameState.players.get(pid);
+                p.gold += 30;
+            }
             gameState.map[battleTileY][battleTileX] = 0;
-            gameState.logMessage = "🎉 전투 승리! 몬스터가 사라졌습니다.";
+            gameState.logMessage = "🎉 전투 승리! (30골드 획득)";
         }
+        battleTileX = -1; battleTileY = -1;
         
-        // 좌표 초기화
-        battleTileX = -1;
-        battleTileY = -1;
-        
-        // 전투가 끝나면 현재 턴을 가진 사람이 맵에서 턴을 넘기도록 처리
+        // 전투 끝나면 맵 턴 넘기기 호출
         passTurn(gameState.currentTurnPlayerId);
     }
 
-    // 🔄 턴 넘기기 (맵/전투 분리 로직)
+    // ⭐ [핵심] 턴 넘기기 로직 수정됨
     public synchronized void passTurn(int playerId) {
         if (gameState.currentTurnPlayerId != playerId) return;
         
         Player currentP = gameState.players.get(playerId);
-        currentP.movePoints = 0; // 이동력 소멸
-        currentP.hasRolled = false; // ⭐ [핵심] 다음 턴을 위해 주사위 상태 초기화
+        currentP.movePoints = 0;
+        currentP.hasRolled = false;
 
-        // [CASE 1] 전투 중일 때
+        // [CASE 1] 전투 중: 라운드 절대 증가 안 함
         if (gameState.isBattleMode) {
-            // 전투 참가자 목록 안에서만 턴을 돌림
-            int currentIndexInList = gameState.battleMemberIds.indexOf(playerId);
-            
-            // 예외 처리: 턴 주인이 전투 멤버가 아닌 경우
-            if (currentIndexInList == -1) {
-                gameState.currentTurnPlayerId = gameState.battleMemberIds.get(0);
-            } else {
-                int nextIndexInList = (currentIndexInList + 1) % gameState.battleMemberIds.size();
-                gameState.currentTurnPlayerId = gameState.battleMemberIds.get(nextIndexInList);
-            }
-            
-            // ⭐ 전투 중에는 라운드 숫자를 올리지 않음!
-            Player nextP = gameState.players.get(gameState.currentTurnPlayerId);
-            gameState.logMessage = String.format("⚔️ [전투] %s님의 차례입니다.", nextP.name);
+            // 전투 로그에만 집중하므로 별도 로직 없음 (processNextBattleTurn에서 관리)
+            // 다만 예외 상황을 대비해 코드는 남겨둠
+            return; 
         } 
         
-        // [CASE 2] 맵 이동 중일 때
+        // [CASE 2] 맵 이동 중
         else {
-            // 전체 플레이어 목록에서 다음 사람 찾기
             int nextId = (gameState.currentTurnPlayerId + 1) % gameState.players.size();
             gameState.currentTurnPlayerId = nextId;
             
-            // 한 바퀴 돌았으면 라운드 증가
+            // ⭐ [중요] 한 바퀴 돌아서 0번 플레이어가 될 때만 라운드 증가
             if (nextId == 0) {
                 gameState.roundNumber++;
-                gameState.logMessage = String.format("🔔 [라운드 %d] 시작!", gameState.roundNumber);
+                gameState.logMessage = String.format("🔔 [라운드 %d] 시작! 몬스터가 더 강해집니다.", gameState.roundNumber);
             } else {
                 Player nextP = gameState.players.get(nextId);
                 gameState.logMessage = String.format("📢 %s님의 턴입니다.", nextP.name);
