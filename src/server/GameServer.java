@@ -8,11 +8,11 @@ import java.util.*;
 
 public class GameServer {
     private static final int PORT = 9999;
-    private static List<ObjectOutputStream> clients = Collections.synchronizedList(new ArrayList<>());
+    private static List<ObjectOutputStream> clients = new ArrayList<>();
     private static GameManager gameManager = new GameManager(); 
 
     public static void main(String[] args) {
-        System.out.println("🔥 For The King Server Started...");
+        System.out.println("🔥 For The King Server (Integrated) Started...");
         try (ServerSocket serverSocket = new ServerSocket(PORT)) {
             while (true) {
                 Socket socket = serverSocket.accept();
@@ -21,20 +21,14 @@ public class GameServer {
         } catch (IOException e) { e.printStackTrace(); }
     }
 
-    public static void broadcast(Message msg) {
-        synchronized (clients) {
-            for (ObjectOutputStream out : clients) {
-                try {
-                    out.reset();
-                    out.writeObject(msg);
-                    out.flush();
-                } catch (IOException e) {}
-            }
+    public static synchronized void broadcast(Message msg) {
+        for (ObjectOutputStream out : clients) {
+            try {
+                out.reset();
+                out.writeObject(msg);
+                out.flush();
+            } catch (IOException e) {}
         }
-    }
-
-    public static void removeClient(ObjectOutputStream out) {
-        synchronized (clients) { clients.remove(out); }
     }
 
     static class ClientHandler extends Thread {
@@ -52,7 +46,7 @@ public class GameServer {
                 out.flush();
                 in = new ObjectInputStream(socket.getInputStream());
                 
-                clients.add(out);
+                synchronized (clients) { clients.add(out); }
 
                 GameState currentState = gameManager.getGameState();
                 synchronized (currentState) {
@@ -63,65 +57,62 @@ public class GameServer {
                     myId = id;
                     out.writeObject(new Message(Message.Type.LOGIN, myId));
                 }
-                
                 broadcast(new Message(Message.Type.LOBBY_UPDATE, new ArrayList<>(currentState.players)));
-                broadcast(new Message(Message.Type.CHAT, "[시스템] Player " + (myId+1) + "님이 입장했습니다."));
 
                 while (true) {
                     Message msg = (Message) in.readObject();
                     
-                    if (msg.type == Message.Type.SET_NAME) { 
-                        gameManager.setPlayerName(myId, (String) msg.payload);
-                        broadcast(new Message(Message.Type.LOBBY_UPDATE, new ArrayList<>(gameManager.getGameState().players)));
-                    }
-                    else if (msg.type == Message.Type.CHAT) { broadcast(msg); } 
-                    else if (msg.type == Message.Type.CHANGE_JOB) {
-                        gameManager.getGameState().players.get(myId).jobClass = (String) msg.payload;
-                        broadcast(new Message(Message.Type.LOBBY_UPDATE, new ArrayList<>(gameManager.getGameState().players)));
-                    }
-                    else if (msg.type == Message.Type.READY) {
-                        boolean ready = (boolean) msg.payload;
-                        gameManager.getGameState().players.get(myId).isReady = ready;
-                        broadcast(new Message(Message.Type.LOBBY_UPDATE, new ArrayList<>(gameManager.getGameState().players)));
-                    }
-                    else if (msg.type == Message.Type.START_GAME) {
-                        broadcast(new Message(Message.Type.START_GAME, gameManager.getGameState()));
-                    }
-                    else if (msg.type == Message.Type.ROLL_DICE) {
-                        gameManager.rollDice(myId);
-                        broadcast(new Message(Message.Type.STATE_UPDATE, gameManager.getGameState()));
-                    }
-                    else if (msg.type == Message.Type.MOVE_REQ) {
-                        int[] move = (int[]) msg.payload;
-                        gameManager.movePlayer(myId, move[0], move[1]);
-                        broadcast(new Message(Message.Type.STATE_UPDATE, gameManager.getGameState()));
-                    }
-                    else if (msg.type == Message.Type.TURN_PASS) {
-                        gameManager.passTurn(myId);
-                        broadcast(new Message(Message.Type.STATE_UPDATE, gameManager.getGameState()));
-                    }
-                    else if (msg.type == Message.Type.BATTLE_ACTION) {
-                        BattleRequest req = (BattleRequest) msg.payload;
-                        gameManager.processBattleAction(myId, req);
-                        broadcast(new Message(Message.Type.STATE_UPDATE, gameManager.getGameState()));
-                    }
-                    // 상점 나가기 메시지 처리
-                    else if (msg.type == Message.Type.SHOP_EXIT) {
-                        gameManager.exitShop(myId);
-                        broadcast(new Message(Message.Type.STATE_UPDATE, gameManager.getGameState()));
-                    }
-                    // 구매요청 처리
-                    else if (msg.type == Message.Type.SHOP_BUY) {
-                        String itemCode = (String) msg.payload; // "ATK" or "HP"
-                        gameManager.buyItem(myId, itemCode); // GameManager에 위임
-                        broadcast(new Message(Message.Type.STATE_UPDATE, gameManager.getGameState()));
+                    switch (msg.type) {
+                        case SET_NAME:
+                            gameManager.setPlayerName(myId, (String) msg.payload);
+                            broadcast(new Message(Message.Type.LOBBY_UPDATE, new ArrayList<>(gameManager.getGameState().players)));
+                            break;
+                        case CHAT:
+                            broadcast(msg);
+                            break;
+                        case CHANGE_JOB:
+                            gameManager.changeJob(myId, (String) msg.payload);
+                            broadcast(new Message(Message.Type.LOBBY_UPDATE, new ArrayList<>(gameManager.getGameState().players)));
+                            break;
+                        case READY:
+                            gameManager.getGameState().players.get(myId).isReady = (boolean) msg.payload;
+                            broadcast(new Message(Message.Type.LOBBY_UPDATE, new ArrayList<>(gameManager.getGameState().players)));
+                            break;
+                        case START_GAME:
+                            broadcast(new Message(Message.Type.START_GAME, gameManager.getGameState()));
+                            break;
+                        // --- 게임 플레이 ---
+                        case ROLL_DICE:
+                            gameManager.rollDice(myId);
+                            broadcast(new Message(Message.Type.STATE_UPDATE, gameManager.getGameState()));
+                            break;
+                        case MOVE_REQ:
+                            int[] move = (int[]) msg.payload;
+                            gameManager.movePlayer(myId, move[0], move[1]);
+                            broadcast(new Message(Message.Type.STATE_UPDATE, gameManager.getGameState()));
+                            break;
+                        case TURN_PASS:
+                            gameManager.passTurn(myId);
+                            broadcast(new Message(Message.Type.STATE_UPDATE, gameManager.getGameState()));
+                            break;
+                        // --- 전투 ---
+                        case BATTLE_ACTION:
+                            gameManager.processBattleAction(myId, (BattleRequest) msg.payload);
+                            broadcast(new Message(Message.Type.STATE_UPDATE, gameManager.getGameState()));
+                            break;
+                        // 상점
+                        case SHOP_BUY:
+                            gameManager.buyItem(myId, (String) msg.payload);
+                            broadcast(new Message(Message.Type.STATE_UPDATE, gameManager.getGameState()));
+                            break;
+                        case SHOP_EXIT:
+                            gameManager.exitShop(myId);
+                            broadcast(new Message(Message.Type.STATE_UPDATE, gameManager.getGameState()));
+                            break;
                     }
                 }
             } catch (Exception e) {
-                System.out.println("Player " + myId + " 연결 종료");
-            } finally {
-                if (out != null) removeClient(out);
-                try { socket.close(); } catch (IOException e) {}
+                clients.remove(out);
             }
         }
     }

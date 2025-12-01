@@ -15,28 +15,29 @@ public class ShopPanel extends JPanel {
     public ShopPanel(ClientApp app) {
         this.mainApp = app;
         setLayout(new BorderLayout());
-        setBackground(new Color(40, 30, 20)); 
+        setBackground(new Color(40, 30, 20)); // 상점 배경 (갈색톤)
 
+        // 1. 상단 (제목 + 골드 정보)
         JPanel topPanel = new JPanel();
         topPanel.setLayout(new BoxLayout(topPanel, BoxLayout.Y_AXIS));
         topPanel.setOpaque(false);
-        topPanel.setBorder(BorderFactory.createEmptyBorder(30, 0, 0, 0));
+        topPanel.setBorder(BorderFactory.createEmptyBorder(30, 0, 20, 0));
 
         JLabel lblTitle = new JLabel("상점", SwingConstants.CENTER);
-        lblTitle.setFont(new Font("SansSerif", Font.BOLD, 36));
+        lblTitle.setFont(new Font("SansSerif", Font.BOLD, 40));
         lblTitle.setForeground(Color.ORANGE);
         lblTitle.setAlignmentX(Component.CENTER_ALIGNMENT);
         
         JPanel infoPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 40, 10));
         infoPanel.setOpaque(false);
 
-        lblGold = new JLabel("💰 골드: 로딩중...");
+        lblGold = new JLabel("💰 골드: - G");
         lblGold.setFont(new Font("SansSerif", Font.BOLD, 24));
         lblGold.setForeground(new Color(255, 215, 0)); 
 
-        lblStats = new JLabel("⚔️ 공격력: -  |  ❤️ 체력: -/-");
-        lblStats.setFont(new Font("SansSerif", Font.BOLD, 24));
-        lblStats.setForeground(new Color(135, 206, 235)); 
+        lblStats = new JLabel("내 정보 로딩중...");
+        lblStats.setFont(new Font("SansSerif", Font.BOLD, 20));
+        lblStats.setForeground(Color.LIGHT_GRAY); 
 
         infoPanel.add(lblGold);
         infoPanel.add(lblStats);
@@ -48,64 +49,70 @@ public class ShopPanel extends JPanel {
 
         add(topPanel, BorderLayout.NORTH);
 
+        // 2. 중앙 (상품 카드 목록) - 화면 정중앙 배치
         JPanel centerWrapper = new JPanel(new GridBagLayout()); 
         centerWrapper.setOpaque(false);
         
         JPanel cardsPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 30, 0));
         cardsPanel.setOpaque(false);
 
-        cardsPanel.add(createCardButton("공격력 강화", "공격력 +5", "50 G", "ATK"));
-        cardsPanel.add(createCardButton("최대 체력", "MaxHP +20", "50 G", "MAXHP"));
-        cardsPanel.add(createCardButton("체력 회복", "HP +30", "30 G", "HEAL"));
+        // 나중에 이미지 넣을 카드 버튼들
+        cardsPanel.add(createPlaceholderCard("공격력 강화", "ATK +5", "50 G", "ATK"));
+        cardsPanel.add(createPlaceholderCard("최대 체력", "MaxHP +20", "50 G", "MAXHP"));
+        cardsPanel.add(createPlaceholderCard("체력 회복", "HP +30", "30 G", "HEAL"));
 
         centerWrapper.add(cardsPanel);
         add(centerWrapper, BorderLayout.CENTER);
 
-        JPanel bottomPanel = new JPanel();
-        bottomPanel.setLayout(new BoxLayout(bottomPanel, BoxLayout.Y_AXIS)); 
+        // 3. 하단 (경고 메시지 + 나가기 버튼) - 구조 수정
+        JPanel bottomPanel = new JPanel(new BorderLayout());
         bottomPanel.setOpaque(false);
-        bottomPanel.setBorder(BorderFactory.createEmptyBorder(0, 0, 40, 0)); 
-        
-        // 경고 메시지 라벨 생성
-        lblWarning = new JLabel(" "); // 초기값은 공백 (안 보이게)
-        lblWarning.setFont(new Font("SansSerif", Font.BOLD, 20));
-        lblWarning.setForeground(Color.RED); // 빨간색
-        lblWarning.setAlignmentX(Component.CENTER_ALIGNMENT);
+        bottomPanel.setBorder(BorderFactory.createEmptyBorder(10, 0, 40, 0)); // 하단 여백 넉넉히
+        bottomPanel.setPreferredSize(new Dimension(800, 150)); // 높이 확보
 
+        // 경고 메시지 (중앙)
+        lblWarning = new JLabel(" ", SwingConstants.CENTER); // 초기값 공백
+        lblWarning.setFont(new Font("SansSerif", Font.BOLD, 22));
+        lblWarning.setForeground(Color.RED);
+        
+        // 나가기 버튼 (하단)
+        JPanel btnPanel = new JPanel(); // 버튼 감싸는 패널
+        btnPanel.setOpaque(false);
+        
         JButton btnExit = new JButton("🚪 상점 나가기");
         btnExit.setFont(new Font("SansSerif", Font.BOLD, 18));
-        btnExit.setPreferredSize(new Dimension(200, 60));
-        btnExit.setMaximumSize(new Dimension(200, 60)); // BoxLayout 크기 고정용
+        btnExit.setPreferredSize(new Dimension(220, 60));
         btnExit.setBackground(new Color(100, 50, 50)); 
         btnExit.setForeground(Color.WHITE);
         btnExit.setFocusPainted(false);
-        btnExit.setAlignmentX(Component.CENTER_ALIGNMENT);
         btnExit.addActionListener(e -> mainApp.send(new Message(Message.Type.SHOP_EXIT, null)));
         
-        // 라벨 -> 간격 -> 버튼 순서로 추가
-        bottomPanel.add(lblWarning);
-        bottomPanel.add(Box.createVerticalStrut(15)); // 간격
-        bottomPanel.add(btnExit);
+        btnPanel.add(btnExit);
+
+        // 배치: 위쪽엔 경고 메시지, 아래쪽엔 버튼
+        bottomPanel.add(lblWarning, BorderLayout.NORTH);
+        bottomPanel.add(btnPanel, BorderLayout.CENTER);
 
         add(bottomPanel, BorderLayout.SOUTH);
     }
 
-    private JButton createCardButton(String title, String desc, String price, String code) {
+    private JButton createPlaceholderCard(String title, String effect, String price, String code) {
+        // 나중에 이미지를 넣을 수 있게 HTML로 레이아웃 잡기
         String html = "<html><center>" +
-                      "<div style='width: 150px; height: 100px; background-color: #555; color: #aaa;'>" + 
-                      "<br><br>[ 이미지 ]" + 
+                      "<div style='width: 180px; height: 120px; border:1px solid gray; background-color: #333; color: #aaa;'>" + 
+                      "<br><br>[ 이미지 공간 ]" + 
                       "</div><br>" +
-                      "<h2>" + title + "</h2>" +
-                      "<p>" + desc + "</p><br>" +
-                      "<h2 style='color: yellow;'>" + price + "</h2>" +
+                      "<h2 style='margin:0;'>" + title + "</h2>" +
+                      "<p style='margin:5px; color:#ccc;'>" + effect + "</p>" +
+                      "<h2 style='color: yellow; margin:5px;'>" + price + "</h2>" +
                       "</center></html>";
 
         JButton btn = new JButton(html);
-        btn.setPreferredSize(new Dimension(220, 350)); 
-        btn.setBackground(new Color(80, 50, 30));
+        btn.setPreferredSize(new Dimension(240, 350)); 
+        btn.setBackground(new Color(60, 50, 40));
         btn.setForeground(Color.WHITE);
         btn.setFocusPainted(false);
-        btn.setBorder(new LineBorder(new Color(150, 100, 50), 3)); 
+        btn.setBorder(new LineBorder(new Color(120, 100, 50), 2)); 
         btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
         
         btn.addActionListener(e -> mainApp.send(new Message(Message.Type.SHOP_BUY, code)));
@@ -122,13 +129,14 @@ public class ShopPanel extends JPanel {
             Player me = state.players.get(myId);
             
             lblGold.setText(String.format("💰 골드: %d G", state.teamGold));
-            lblStats.setText(String.format("⚔️ 공격력: %d  |  ❤️ 체력: %d / %d", me.attack, me.hp, me.maxHp));
+            lblStats.setText(String.format("   |   ⚔️ Atk: %d   ❤️ HP: %d / %d", 
+                me.getTotalAttack(), me.hp, me.getTotalMaxHp()));
             
             // 경고 메시지 업데이트
             if (state.shopWarning != null && !state.shopWarning.isEmpty()) {
-                lblWarning.setText(state.shopWarning);
+                lblWarning.setText("⚠️ " + state.shopWarning);
             } else {
-                lblWarning.setText(" "); // 경고 없으면 공백 처리
+                lblWarning.setText(" "); // 경고 없으면 공백 유지 (레이아웃 틀어짐 방지)
             }
 
             this.revalidate();

@@ -9,7 +9,7 @@ import java.net.Socket;
 import java.util.List;
 
 public class ClientApp extends JFrame {
-    private static final String SERVER_IP = "127.0.0.1";
+    private static final String SERVER_IP = "127.0.0.1"; 
     private static final int PORT = 9999;
 
     private Socket socket;
@@ -22,24 +22,28 @@ public class ClientApp extends JFrame {
     private CardLayout cardLayout;
     private JPanel mainContainer;
     
+    // 패널들
     private LobbyPanel lobbyPanel;
     private GamePanel gamePanel;
     private BattlePanel battlePanel;
     private ShopPanel shopPanel;
 
     public ClientApp() {
-        setTitle("For The King - 접속 중...");
-        setExtendedState(JFrame.MAXIMIZED_BOTH); 
+        setTitle("For The King");
+        setSize(1000, 800); 
+        setLocationRelativeTo(null);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
         cardLayout = new CardLayout();
         mainContainer = new JPanel(cardLayout);
 
+        // 패널 생성
         lobbyPanel = new LobbyPanel(this);
         gamePanel = new GamePanel(this);
         battlePanel = new BattlePanel(this);
         shopPanel = new ShopPanel(this); 
 
+        // 패널 등록
         mainContainer.add(lobbyPanel, "LOBBY");
         mainContainer.add(gamePanel, "GAME");
         mainContainer.add(battlePanel, "BATTLE");
@@ -90,7 +94,6 @@ public class ClientApp extends JFrame {
         new Thread(() -> {
             try {
                 socket = new Socket(SERVER_IP, PORT);
-                
                 out = new ObjectOutputStream(socket.getOutputStream());
                 out.flush();
                 in = new ObjectInputStream(socket.getInputStream());
@@ -120,6 +123,8 @@ public class ClientApp extends JFrame {
                         case START_GAME:
                             GameState initialState = (GameState) msg.payload;
                             SwingUtilities.invokeLater(() -> {
+                                setExtendedState(JFrame.MAXIMIZED_BOTH);
+                                
                                 gamePanel.updateState(initialState);
                                 cardLayout.show(mainContainer, "GAME");
                                 mainContainer.requestFocusInWindow();
@@ -129,17 +134,13 @@ public class ClientApp extends JFrame {
                         case STATE_UPDATE:
                             GameState state = (GameState) msg.payload;
                             SwingUtilities.invokeLater(() -> {
-                                // ⭐ [여기가 핵심] 데이터를 받으면 상점 UI에도 알려줘야 합니다!
-                                shopPanel.updateState(state);
-
                                 if (state.isBattleMode) {
                                     battlePanel.updateState(state);
                                     cardLayout.show(mainContainer, "BATTLE");
-                                } 
-                                else if (state.isShopMode) {
+                                } else if (state.isShopMode) {
+                                    shopPanel.updateState(state);
                                     cardLayout.show(mainContainer, "SHOP");
-                                }
-                                else {
+                                } else {
                                     gamePanel.updateState(state);
                                     cardLayout.show(mainContainer, "GAME");
                                     mainContainer.requestFocusInWindow(); 
@@ -150,9 +151,6 @@ public class ClientApp extends JFrame {
                 }
             } catch (Exception e) {
                 System.out.println("연결 끊김: " + e.getMessage());
-                SwingUtilities.invokeLater(() -> 
-                    JOptionPane.showMessageDialog(this, "서버 연결이 종료되었습니다.", "알림", JOptionPane.ERROR_MESSAGE)
-                );
             }
         }).start();
     }
@@ -160,7 +158,7 @@ public class ClientApp extends JFrame {
     public void send(Message msg) {
         try {
             if (out != null) {
-                out.reset();
+                out.reset(); 
                 out.writeObject(msg);
                 out.flush();
             }
