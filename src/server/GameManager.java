@@ -35,6 +35,12 @@ public class GameManager {
         if (gameState.currentTurnPlayerId != playerId) return;
         
         Player p = gameState.players.get(playerId);
+        
+        if (p.hp <= 0) {
+            gameState.logMessage = "☠️ 사망자는 행동할 수 없습니다.";
+            return;
+        }
+
         if (p.hasRolled || p.movePoints > 0) return; 
 
         p.movePoints = new Random().nextInt(6) + 1;
@@ -47,6 +53,9 @@ public class GameManager {
         if (gameState.currentTurnPlayerId != playerId) return;
         
         Player p = gameState.players.get(playerId);
+
+        if (p.hp <= 0) return;
+
         if (p.movePoints <= 0) { gameState.logMessage = "🚫 이동력이 부족합니다!"; return; }
 
         int newX = p.x + dx;
@@ -147,8 +156,10 @@ public class GameManager {
         
         for (Player other : gameState.players) {
             if (other.id == triggerPlayer.id) continue;
+
             int dist = Math.max(Math.abs(triggerPlayer.x - other.x), Math.abs(triggerPlayer.y - other.y));
-            // 살아있는 사람만 전투 참가 (죽은 자는 제외)
+            
+            // 거리가 2칸 이내이고, 살아있으면 참가
             if (dist <= 2 && other.hp > 0) {
                 participants.add(other);
             }
@@ -163,10 +174,10 @@ public class GameManager {
         int r = gameState.roundNumber; 
         
         if (isBoss) {
-            Monster boss = new Monster(99, "🔥 드래곤 (BOSS)", 500, 30 + (r*5), 8);
+            Monster boss = new Monster(99, "🔥 드래곤 (BOSS)", 350, 25 + (r*5), 8);
             gameState.monsters.add(boss);
             gameState.battleOrder.add(new BattleUnit(true, 99, boss.name, boss.speed));
-            gameState.logMessage = "🔥 보스 출현! 드래곤과의 결전!";
+            gameState.logMessage = "🔥 보스 출현! " + participants.size() + "명이 함께 싸웁니다!";
         } else {
             Monster m1 = new Monster(0, "고블린 (Lv."+r+")", 30 + (r * 10), 5 + (r * 2), 12);
             Monster m2 = new Monster(1, "오크 (Lv."+r+")", 50 + (r * 15), 15 + (r * 3), 3);
@@ -175,7 +186,7 @@ public class GameManager {
 
             gameState.battleOrder.add(new BattleUnit(true, 0, m1.name, m1.speed));
             gameState.battleOrder.add(new BattleUnit(true, 1, m2.name, m2.speed));
-            gameState.logMessage = "⚔️ 몬스터 무리와 마주쳤습니다!";
+            gameState.logMessage = "⚔️ 몬스터 출현! " + participants.size() + "명이 난입했습니다!";
         }
 
         Collections.sort(gameState.battleOrder);
@@ -222,26 +233,42 @@ public class GameManager {
         
         if (m == null || m.isDead) return;
 
-        // [핵심] 타겟팅: 살아있는(hp > 0) 플레이어만 공격 대상
         List<Player> targets = new ArrayList<>();
         for (int pid : gameState.battleMemberIds) {
             Player p = gameState.players.get(pid);
             if (p.hp > 0) targets.add(p);
         }
 
-        if (!targets.isEmpty()) {
+        if (targets.isEmpty()) return;
+
+        if (m.id == 99) {
+            if (Math.random() < 0.3) {
+                gameState.battleLog.add("🔥🔥 드래곤 화염 브레스!");
+                for (Player p : targets) {
+                    int dmg = (int)(m.attack * 0.8); 
+                    p.hp = Math.max(0, p.hp - dmg);
+                    gameState.battleLog.add(String.format("   -> %s 불탐! [%d 피해]", p.name, dmg));
+                    if (p.hp == 0) gameState.battleLog.add("☠️ " + p.name + "님이 재가 되었습니다.");
+                }
+            } 
+            else {
+                Player target = targets.get(new Random().nextInt(targets.size()));
+                int dmg = (int)(m.attack * 1.2);
+                gameState.battleLog.add("🐲 드래곤이 물어뜯습니다!");
+                target.hp = Math.max(0, target.hp - dmg);
+                gameState.battleLog.add(String.format("   -> %s [%d 피해]", target.name, dmg));
+                if (target.hp == 0) gameState.battleLog.add("☠️ " + target.name + "님이 쓰러졌습니다!");
+            }
+        } 
+        else {
             Player target = targets.get(new Random().nextInt(targets.size()));
             int dmg = m.attack;
             target.hp = Math.max(0, target.hp - dmg); 
-            
-            gameState.battleLog.add(String.format("👹 %s의 공격! -> %s [%d 피해]", m.name, target.name, dmg));
-
-            if (target.hp == 0) {
-                gameState.battleLog.add("☠️ " + target.name + "님이 쓰러졌습니다!");
-            }
+            gameState.battleLog.add(String.format("⚔️ %s의 공격 -> %s [%d 피해]", m.name, target.name, dmg));
+            if (target.hp == 0) gameState.battleLog.add("☠️ " + target.name + "님이 쓰러졌습니다!");
         }
 
-        // [핵심] 이번 전투 참가자가 모두 죽었는지 확인
+        // 전투 종료(전멸) 체크
         boolean allParticipantsDead = true;
         for (int pid : gameState.battleMemberIds) {
             if (gameState.players.get(pid).hp > 0) {
@@ -251,7 +278,6 @@ public class GameManager {
         }
 
         if (allParticipantsDead) {
-            // 이번 전투 패배
             endBattle(false); 
         }
     }
@@ -265,7 +291,7 @@ public class GameManager {
         
         if ("FLEE".equals(req.action)) {
             if (Math.random() < 0.5) { 
-                endBattle(true); // 도망 성공 시 맵으로 복귀
+                endBattle(true); 
                 gameState.logMessage = "💨 도망 성공!";
                 passTurn(playerId); 
                 return;
@@ -325,7 +351,6 @@ public class GameManager {
         gameState.isBattleMode = false;
         
         if (win) {
-            // 승리
             if (battleTileX != -1 && gameState.map[battleTileY][battleTileX] == 4) {
                 gameState.teamGold += 500;
                 gameState.logMessage = "🎉🎉 드래곤 처치! 게임 클리어! (+500G) 🎉🎉";
@@ -334,62 +359,69 @@ public class GameManager {
                 gameState.logMessage = "🎉 승리! (팀 자금 +50G)";
             }
             if(battleTileX != -1) gameState.map[battleTileY][battleTileX] = 0; 
-            // 승리 시에는 현재 턴 플레이어 다음으로 턴을 넘김
             passTurn(gameState.currentTurnPlayerId);
         } else {
-            // 패배 (전투 참가자 전멸)
             gameState.logMessage = "💀 전투 패배... 사망자는 행동할 수 없습니다.";
-            
-            // 모든 플레이어가 죽었는지 확인 (진짜 게임 오버)
-            boolean globalWipe = true;
-            for(Player p : gameState.players) {
-                if(p.hp > 0) { globalWipe = false; break; }
-            }
-
-            if(globalWipe) {
-                gameState.logMessage = "☠️ [GAME OVER] 모든 플레이어가 사망했습니다.";
-                // 여기서 게임을 멈추거나 리셋 로직을 넣을 수 있음 (현재는 멈춤 상태 유지)
-            } else {
-                // 아직 살아있는 동료가 있다면, 그 사람에게 턴을 넘김
-                passTurn(gameState.currentTurnPlayerId);
-            }
+            passTurn(gameState.currentTurnPlayerId);
         }
         
         battleTileX = -1;
         battleTileY = -1;
     }
 
-    // 턴 넘기기
+    private void resetGame() {
+        GameState newState = new GameState();
+        gameState.map = newState.map;
+        gameState.roundNumber = 1;
+        gameState.teamGold = 100;
+        gameState.logMessage = "🔄 전멸하여 게임이 초기화되었습니다.";
+        gameState.isBattleMode = false;
+        gameState.isShopMode = false;
+        gameState.monsters.clear();
+
+        // 2. 플레이어 상태 초기화
+        for (Player p : gameState.players) {
+            p.hp = p.getTotalMaxHp();
+            p.x = 0; p.y = 0; // 시작 지점으로 이동
+            p.movePoints = 0;
+            p.hasRolled = false;
+            p.isReady = false; // 준비 상태 해제
+        }
+        gameState.currentTurnPlayerId = 0;
+
+        // 3. 클라이언트들에게 GAME_OVER 메시지 전송 (로비로 이동하라고 명령)
+        GameServer.broadcast(new Message(Message.Type.GAME_OVER, null));
+        GameServer.broadcast(new Message(Message.Type.LOBBY_UPDATE, new ArrayList<>(gameState.players)));
+    }
+
     public synchronized void passTurn(int playerId) {
         if (gameState.isBattleMode) return; 
         
-        // 현재 플레이어 상태 초기화
         Player currentP = gameState.players.get(playerId);
         currentP.movePoints = 0;
         currentP.hasRolled = false;
 
-        int nextId = (gameState.currentTurnPlayerId + 1) % gameState.players.size();
-        
-        // 살아있는 플레이어 찾기
-        int loopCount = 0;
-        while (gameState.players.get(nextId).hp <= 0) {
-            nextId = (nextId + 1) % gameState.players.size();
-            loopCount++;
-            
-            // 한 바퀴 다 돌았는데 전원 사망이면 루프 탈출 (무한루프 방지)
-            if (loopCount >= gameState.players.size()) {
-                gameState.logMessage = "☠️ 모든 플레이어가 사망했습니다.";
-                return;
+        boolean allDead = true;
+        for(Player p : gameState.players) {
+            if (p.hp > 0) {
+                allDead = false;
+                break;
             }
         }
 
-        // 살아있는 다음 플레이어에게 턴 부여
+        if (allDead) {
+            resetGame();
+            return;
+        }
+
+        int nextId = (gameState.currentTurnPlayerId + 1) % gameState.players.size();
+        
+        while (gameState.players.get(nextId).hp <= 0) {
+            nextId = (nextId + 1) % gameState.players.size();
+        }
+
         gameState.currentTurnPlayerId = nextId;
 
-        // ID 0번(방장) 차례가 돌아오거나, 라운드 넘김 처리가 필요하면 여기서 체크
-        // (단순화를 위해 누군가의 턴이 돌아오면 라운드 처리 로직은 생략하거나
-        //  살아있는 사람 중 가장 ID가 낮은 사람일 때 라운드를 올리는 식으로 보정 가능.
-        //  여기서는 일단 단순히 0번이 걸릴 때 라운드 증가 유지)
         if (nextId == 0) {
             gameState.roundNumber++;
             gameState.logMessage = String.format("🔔 라운드 %d 시작!", gameState.roundNumber);

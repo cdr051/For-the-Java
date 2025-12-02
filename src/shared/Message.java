@@ -10,12 +10,13 @@ public class Message implements Serializable {
         
         // 전투 관련
         BATTLE_ACTION, 
-        SHOP_BUY, SHOP_EXIT
+        SHOP_BUY, SHOP_EXIT,
+        GAME_OVER
     }
     
     // 전투 액션 상세 정보
     public static class BattleRequest implements Serializable {
-        public String action; // "ATTACK", "SKILL1", "SKILL2", "FLEE"
+        public String action; 
         public int targetIndex; 
         
         public BattleRequest(String action, int targetIndex) {

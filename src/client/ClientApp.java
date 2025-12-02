@@ -124,7 +124,6 @@ public class ClientApp extends JFrame {
                             GameState initialState = (GameState) msg.payload;
                             SwingUtilities.invokeLater(() -> {
                                 setExtendedState(JFrame.MAXIMIZED_BOTH);
-                                
                                 gamePanel.updateState(initialState);
                                 cardLayout.show(mainContainer, "GAME");
                                 mainContainer.requestFocusInWindow();
@@ -146,6 +145,19 @@ public class ClientApp extends JFrame {
                                     mainContainer.requestFocusInWindow(); 
                                 }
                             });
+                            break;
+                            
+                        case GAME_OVER:
+                            SwingUtilities.invokeLater(() -> {
+                                JOptionPane.showMessageDialog(this, 
+                                    "☠️ 전멸했습니다... 게임 오버!", 
+                                    "GAME OVER", 
+                                    JOptionPane.ERROR_MESSAGE);
+                                cardLayout.show(mainContainer, "LOBBY");
+                            });
+                            break;
+                        
+                        default:
                             break;
                     }
                 }
