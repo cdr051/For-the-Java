@@ -25,28 +25,35 @@ public class BattlePanel extends JPanel {
         setLayout(new BorderLayout());
         setBackground(new Color(40, 40, 40)); 
 
-        monstersPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 30, 20));
+        monstersPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 30, 40));
         monstersPanel.setOpaque(false);
-        monstersPanel.setPreferredSize(new Dimension(800, 180));
+        monstersPanel.setPreferredSize(new Dimension(800, 250));
         add(monstersPanel, BorderLayout.NORTH);
 
         battleLogArea = new JTextArea();
         battleLogArea.setEditable(false);
-        battleLogArea.setBackground(new Color(20, 20, 20)); 
+        battleLogArea.setBackground(new Color(0, 0, 0, 100));
         battleLogArea.setForeground(Color.WHITE);           
         battleLogArea.setFont(new Font("Monospaced", Font.PLAIN, 14));
         battleLogArea.setMargin(new Insets(10, 10, 10, 10));
 
         logScrollPane = new JScrollPane(battleLogArea);
         logScrollPane.setBorder(BorderFactory.createTitledBorder(
-                BorderFactory.createLineBorder(Color.GRAY), 
+                BorderFactory.createLineBorder(Color.LIGHT_GRAY), 
                 "⚔️ 전투 기록", 
                 TitledBorder.DEFAULT_JUSTIFICATION, 
                 TitledBorder.DEFAULT_POSITION, 
                 new Font("SansSerif", Font.BOLD, 12), 
                 Color.WHITE));
         logScrollPane.setOpaque(false);
-        add(logScrollPane, BorderLayout.CENTER);
+        logScrollPane.getViewport().setOpaque(false);
+        
+        JPanel centerWrapper = new JPanel(new BorderLayout());
+        centerWrapper.setOpaque(false);
+        centerWrapper.setBorder(BorderFactory.createEmptyBorder(10, 50, 10, 50));
+        centerWrapper.add(logScrollPane, BorderLayout.CENTER);
+        
+        add(centerWrapper, BorderLayout.CENTER);
 
         JPanel bottomContainer = new JPanel(new BorderLayout());
         bottomContainer.setOpaque(false);
@@ -56,8 +63,9 @@ public class BattlePanel extends JPanel {
         bottomContainer.add(playersPanel, BorderLayout.NORTH);
 
         actionPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 20));
-        actionPanel.setBackground(new Color(0, 0, 0, 150)); 
+        actionPanel.setBackground(new Color(0, 0, 0, 180));
         
+        // 액션 버튼들 (나중에 이것들도 이미지 버튼으로 바꿀 수 있음)
         btnAttack = createActionButton("⚔️ 기본 공격", "ATTACK");
         btnSkill1 = createActionButton("⚡ 강타", "SKILL1");
         btnSkill2 = createActionButton("🔥 광역기", "SKILL2");
@@ -70,6 +78,20 @@ public class BattlePanel extends JPanel {
         
         bottomContainer.add(actionPanel, BorderLayout.SOUTH);
         add(bottomContainer, BorderLayout.SOUTH);
+    }
+
+    @Override
+    protected void paintComponent(Graphics g) {
+        super.paintComponent(g);
+        // images/battle/battle_bg.png 로드
+        Image bgImg = ResourceManager.getImage("battle", "battle_bg.png");
+        if (bgImg != null) {
+            g.drawImage(bgImg, 0, 0, getWidth(), getHeight(), null);
+        } else {
+            // 이미지 없으면 어두운 회색
+            g.setColor(new Color(30, 30, 30));
+            g.fillRect(0, 0, getWidth(), getHeight());
+        }
     }
 
     private JButton createActionButton(String text, String actionCode) {
@@ -87,6 +109,7 @@ public class BattlePanel extends JPanel {
     public void updateState(GameState state) {
         this.gameState = state;
         
+        // 로그 업데이트
         StringBuilder sb = new StringBuilder();
         if (state.battleLog != null) {
             for (String log : state.battleLog) {
@@ -101,26 +124,50 @@ public class BattlePanel extends JPanel {
         monstersPanel.removeAll();
         for (int i = 0; i < state.monsters.size(); i++) {
             Monster m = state.monsters.get(i);
-            String txt = String.format("<html><center><b>%s</b><br>HP: %d/%d<br>SPD: %d</center></html>", 
-                                       m.name, m.hp, m.maxHp, m.speed);
-            JButton mBtn = new JButton(txt);
-            mBtn.setPreferredSize(new Dimension(140, 120));
-            mBtn.setFocusable(false);
             
+            JButton mBtn = new JButton();
+            mBtn.setPreferredSize(new Dimension(150, 180));
+            mBtn.setFocusable(false);
+            mBtn.setContentAreaFilled(false);
+            mBtn.setBorderPainted(false);
+
+            String imgName = "mon_goblin.png";
+            if (m.id == 99) imgName = "mon_dragon.png";
+            else if (m.name.contains("오크")) imgName = "mon_orc.png";
+            
+            Image monImg = ResourceManager.getImage("battle", imgName);
+
+            if (monImg != null) {
+                monImg = monImg.getScaledInstance(120, 120, Image.SCALE_SMOOTH);
+                mBtn.setIcon(new ImageIcon(monImg));
+                
+                mBtn.setText(String.format("<html><center><font color='white'><b>%s</b></font><br><font color='#ff6666'>HP: %d/%d</font></center></html>", 
+                        m.name, m.hp, m.maxHp));
+                mBtn.setVerticalTextPosition(SwingConstants.BOTTOM);
+                mBtn.setHorizontalTextPosition(SwingConstants.CENTER);
+            } else {
+                mBtn.setContentAreaFilled(true);
+                mBtn.setBorderPainted(true);
+                mBtn.setText(String.format("<html><center><b>%s</b><br>HP: %d/%d</center></html>", 
+                                       m.name, m.hp, m.maxHp));
+                mBtn.setBackground(Color.WHITE);
+            }
+            
+            // 상태 처리 (사망, 선택 등)
             if (m.isDead) {
                 mBtn.setEnabled(false);
-                mBtn.setBackground(Color.DARK_GRAY);
-                mBtn.setForeground(Color.LIGHT_GRAY);
+                mBtn.setDisabledIcon(UIManager.getIcon("OptionPane.errorIcon")); // 임시 아이콘 또는 흑백처리
                 mBtn.setText("<html><center>☠️<br>처치됨</center></html>");
-                mBtn.setBorder(BorderFactory.createLineBorder(Color.GRAY));
+                mBtn.setBackground(Color.DARK_GRAY);
             } else {
                 if (i == selectedMonsterIndex) {
-                    mBtn.setBorder(BorderFactory.createLineBorder(Color.YELLOW, 4));
-                    mBtn.setBackground(new Color(255, 255, 220)); 
+                    // 선택된 몬스터는 테두리 강조
+                    mBtn.setBorderPainted(true);
+                    mBtn.setBorder(BorderFactory.createLineBorder(Color.YELLOW, 3));
                 } else {
-                    mBtn.setBorder(BorderFactory.createLineBorder(Color.RED, 1));
-                    mBtn.setBackground(Color.WHITE);
+                    mBtn.setBorderPainted(false);
                 }
+                
                 int finalI = i;
                 mBtn.addActionListener(e -> {
                     this.selectedMonsterIndex = finalI;
@@ -139,31 +186,41 @@ public class BattlePanel extends JPanel {
             if(p == null) continue;
 
             JPanel pPanel = new JPanel();
-            pPanel.setLayout(new GridLayout(3, 1));
-            pPanel.setPreferredSize(new Dimension(150, 80));
-            pPanel.setBackground(p.color); 
+            pPanel.setLayout(new BorderLayout());
+            pPanel.setPreferredSize(new Dimension(120, 100));
+
+            pPanel.setOpaque(false);
+
+            String charFile = "char_" + p.jobClass + ".png";
+            Image charImg = ResourceManager.getImage("char", charFile);
             
-            pPanel.setBorder(BorderFactory.createTitledBorder(
-                    BorderFactory.createLineBorder(Color.BLACK),
-                    p.name + " (" + p.jobClass + ")",
-                    TitledBorder.CENTER,
-                    TitledBorder.TOP,
-                    new Font("SansSerif", Font.BOLD, 12),
-                    Color.BLACK));
-            
-            JLabel hpLbl = new JLabel("HP: " + p.hp + " / " + p.getTotalMaxHp(), SwingConstants.CENTER);
-            JLabel spdLbl = new JLabel("속도: " + p.getTotalSpeed(), SwingConstants.CENTER);
-            
-            if (state.currentTurnPlayerId == id) {
-                hpLbl.setFont(new Font("SansSerif", Font.BOLD, 12));
-                hpLbl.setForeground(Color.RED);
-                pPanel.setBorder(BorderFactory.createTitledBorder(
-                        BorderFactory.createLineBorder(Color.RED, 3), "▶ " + p.name, 
-                        TitledBorder.CENTER, TitledBorder.TOP));
+            JLabel faceLbl = new JLabel();
+            faceLbl.setHorizontalAlignment(SwingConstants.CENTER);
+            if (charImg != null) {
+                charImg = charImg.getScaledInstance(50, 50, Image.SCALE_SMOOTH);
+                faceLbl.setIcon(new ImageIcon(charImg));
+            } else {
+                faceLbl.setText(p.jobClass.substring(0, 1));
+                faceLbl.setOpaque(true);
+                faceLbl.setBackground(p.color);
+                faceLbl.setForeground(Color.WHITE);
+                faceLbl.setFont(new Font("SansSerif", Font.BOLD, 20));
+                faceLbl.setPreferredSize(new Dimension(50, 50));
             }
 
-            pPanel.add(hpLbl);
-            pPanel.add(spdLbl);
+            JLabel infoLbl = new JLabel(
+                String.format("<html><center><font color='white'>%s</font><br><font color='#00ff00'>HP: %d</font></center></html>", 
+                p.name, p.hp), SwingConstants.CENTER);
+            
+            pPanel.add(faceLbl, BorderLayout.CENTER);
+            pPanel.add(infoLbl, BorderLayout.SOUTH);
+
+            if (state.currentTurnPlayerId == id) {
+                pPanel.setBorder(BorderFactory.createLineBorder(Color.CYAN, 2));
+            } else {
+                pPanel.setBorder(BorderFactory.createEmptyBorder());
+            }
+
             playersPanel.add(pPanel);
         }
 

@@ -12,8 +12,15 @@ public class GamePanel extends JPanel {
     
     private MapPanel mapPanel;
     private JPanel sidePanel;
+    
     private JLabel lblTurnInfo;
-    private JLabel lblMyStatus;
+    private JLabel lblDiceResult; 
+    
+    private JLabel lblStatGold;
+    private JLabel lblStatHp;
+    private JLabel lblStatAtk;
+    private JLabel lblStatMove;
+    
     private JButton btnRoll;
     private JButton btnEndTurn;
 
@@ -22,6 +29,7 @@ public class GamePanel extends JPanel {
         setLayout(new BorderLayout());
         setBackground(new Color(30, 30, 30));
 
+        // 1. 맵 영역
         JPanel mapContainer = new JPanel(new BorderLayout()); 
         mapContainer.setBackground(new Color(30, 30, 30)); 
         
@@ -31,34 +39,49 @@ public class GamePanel extends JPanel {
         mapContainer.add(mapPanel, BorderLayout.CENTER); 
         add(mapContainer, BorderLayout.CENTER);
 
+        // 2. 사이드 패널
         sidePanel = new JPanel();
         sidePanel.setLayout(new BoxLayout(sidePanel, BoxLayout.Y_AXIS));
-        sidePanel.setPreferredSize(new Dimension(250, 0)); 
+        sidePanel.setPreferredSize(new Dimension(280, 0)); 
         sidePanel.setBorder(new EmptyBorder(20, 20, 20, 20));
         sidePanel.setBackground(new Color(45, 45, 45)); 
 
         lblTurnInfo = new JLabel("게임 대기 중...");
-        lblTurnInfo.setFont(new Font("SansSerif", Font.BOLD, 18));
+        lblTurnInfo.setFont(new Font("SansSerif", Font.BOLD, 20));
         lblTurnInfo.setForeground(Color.WHITE); 
         lblTurnInfo.setAlignmentX(Component.CENTER_ALIGNMENT);
 
-        lblMyStatus = new JLabel("-");
-        lblMyStatus.setFont(new Font("SansSerif", Font.PLAIN, 14));
-        lblMyStatus.setForeground(Color.LIGHT_GRAY);
-        lblMyStatus.setAlignmentX(Component.CENTER_ALIGNMENT);
+        lblDiceResult = new JLabel();
+        lblDiceResult.setPreferredSize(new Dimension(100, 100));
+        lblDiceResult.setAlignmentX(Component.CENTER_ALIGNMENT);
+        lblDiceResult.setBorder(BorderFactory.createEmptyBorder(20, 0, 20, 0));
 
-        btnRoll = new JButton("🎲 주사위 굴리기");
-        stylePlaceholderButton(btnRoll);
+        JPanel statusBox = new JPanel(new GridLayout(4, 1, 5, 10)); 
+        statusBox.setOpaque(false);
+        statusBox.setMaximumSize(new Dimension(240, 160));
+        
+        lblStatHp = createStatLabel("icon_heart.png", "HP: -");
+        lblStatAtk = createStatLabel("icon_sword.png", "ATK: -");
+        lblStatGold = createStatLabel("icon_gold.png", "Gold: -");
+        lblStatMove = createStatLabel("icon_shoe.png", "Move: -");
+        
+        statusBox.add(lblStatHp);
+        statusBox.add(lblStatAtk);
+        statusBox.add(lblStatGold);
+        statusBox.add(lblStatMove);
+
+        btnRoll = createImgButton("btn_roll.png", "주사위 굴리기");
         btnRoll.addActionListener(e -> mainApp.send(new Message(Message.Type.ROLL_DICE, null)));
 
-        btnEndTurn = new JButton("🛡️ 턴 종료");
-        stylePlaceholderButton(btnEndTurn);
+        btnEndTurn = createImgButton("btn_pass.png", "턴 종료");
         btnEndTurn.addActionListener(e -> mainApp.send(new Message(Message.Type.TURN_PASS, null)));
         
         sidePanel.add(lblTurnInfo);
-        sidePanel.add(Box.createVerticalStrut(30)); 
-        sidePanel.add(lblMyStatus);
-        sidePanel.add(Box.createVerticalGlue());    
+        sidePanel.add(Box.createVerticalStrut(10));
+        sidePanel.add(lblDiceResult);
+        sidePanel.add(Box.createVerticalStrut(10));
+        sidePanel.add(statusBox);
+        sidePanel.add(Box.createVerticalGlue()); 
         sidePanel.add(btnRoll);
         sidePanel.add(Box.createVerticalStrut(15)); 
         sidePanel.add(btnEndTurn);
@@ -70,15 +93,41 @@ public class GamePanel extends JPanel {
         add(sidePanel, BorderLayout.EAST);
     }
 
-    private void stylePlaceholderButton(JButton btn) {
+    private JLabel createStatLabel(String iconName, String defaultText) {
+        JLabel lbl = new JLabel(defaultText);
+        lbl.setFont(new Font("SansSerif", Font.BOLD, 16));
+        lbl.setForeground(Color.LIGHT_GRAY);
+        
+        Image img = ResourceManager.getImage("ui", iconName);
+        if (img != null) {
+            img = img.getScaledInstance(32, 32, Image.SCALE_SMOOTH);
+            lbl.setIcon(new ImageIcon(img));
+            lbl.setIconTextGap(15); 
+        }
+        return lbl;
+    }
+
+    private JButton createImgButton(String imgName, String fallbackText) {
+        JButton btn = new JButton();
         btn.setAlignmentX(Component.CENTER_ALIGNMENT);
-        btn.setFont(new Font("SansSerif", Font.BOLD, 16));
-        btn.setForeground(Color.WHITE);
-        btn.setBackground(new Color(70, 70, 70)); 
-        btn.setFocusPainted(false);
-        btn.setPreferredSize(new Dimension(200, 50)); 
-        btn.setMaximumSize(new Dimension(200, 50));
+        btn.setPreferredSize(new Dimension(200, 60)); 
+        btn.setMaximumSize(new Dimension(200, 60));
         btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        btn.setFocusPainted(false);
+        
+        Image img = ResourceManager.getImage("ui", imgName);
+        if (img != null) {
+            Image resized = img.getScaledInstance(200, 60, Image.SCALE_SMOOTH);
+            btn.setIcon(new ImageIcon(resized));
+            btn.setContentAreaFilled(false);
+            btn.setBorderPainted(false);
+        } else {
+            btn.setText(fallbackText);
+            btn.setFont(new Font("SansSerif", Font.BOLD, 16));
+            btn.setForeground(Color.WHITE);
+            btn.setBackground(new Color(70, 70, 70));
+        }
+        return btn;
     }
 
     public void updateState(GameState state) {
@@ -97,21 +146,36 @@ public class GamePanel extends JPanel {
         String turnColor = isMyTurn ? "#00BFFF" : "#FF6347"; 
         lblTurnInfo.setText(
             "<html><center>" +
-            "⏳ ROUND " + gameState.roundNumber + "<br><br>" +
-            "현재 턴<br><font size='6' color='" + turnColor + "'>" + 
-            currentP.name + "</font>" +
+            "⏳ ROUND " + gameState.roundNumber + "<br>" +
+            "<font size='6' color='" + turnColor + "'>" + currentP.name + "</font>" +
             "</center></html>"
         );
         
-        lblMyStatus.setText(
-            "<html><div style='text-align: center; width: 180px;'>" +
-            "<hr>" + 
-            "<b>[ 내 정보 ]</b><br><br>" +
-            "이동력: <font color='#00FF00'>" + me.movePoints + "</font><br>" +
-            "팀 골드: <font color='#FFD700'>" + gameState.teamGold + " G</font><br>" +
-            "HP: " + me.hp + " / " + me.getTotalMaxHp() +
-            "</div></html>"
-        );
+        lblStatHp.setText(String.format("%d / %d", me.hp, me.getTotalMaxHp()));
+        lblStatAtk.setText(String.format("%d (+%d)", me.baseAttack, me.bonusAttack));
+        lblStatGold.setText(String.format("%d G", gameState.teamGold));
+        
+        if (me.movePoints > 0) {
+            lblStatMove.setText("<html><font color='#00FF00'>" + me.movePoints + " 칸</font></html>");
+        } else {
+            lblStatMove.setText("0 칸");
+        }
+
+        if (me.hasRolled && me.lastRoll > 0) {
+            int diceNum = me.lastRoll; 
+            
+            Image diceImg = ResourceManager.getImage("dice", "dice_" + diceNum + ".png");
+            if (diceImg != null) {
+                diceImg = diceImg.getScaledInstance(80, 80, Image.SCALE_SMOOTH);
+                lblDiceResult.setIcon(new ImageIcon(diceImg));
+            } else {
+                lblDiceResult.setIcon(null);
+                lblDiceResult.setText("🎲 " + diceNum); 
+            }
+        } else {
+            lblDiceResult.setIcon(null);
+            lblDiceResult.setText("");
+        }
         
         if (isMyTurn) {
             btnRoll.setEnabled(me.movePoints == 0 && !me.hasRolled); 
@@ -127,7 +191,7 @@ public class GamePanel extends JPanel {
         protected void paintComponent(Graphics g) {
             super.paintComponent(g);
             if (gameState == null) return;
-
+          
             Image bgImg = ResourceManager.getImage("ui", "background.png");
             if (bgImg != null) {
                 g.drawImage(bgImg, 0, 0, getWidth(), getHeight(), null);
@@ -138,23 +202,18 @@ public class GamePanel extends JPanel {
 
             int mapCols = 12;
             int mapRows = 8;
+            int padding = 50; 
             
-
-            int padding = 100; // 여백 크기
-
             int availableW = getWidth() - (padding * 2);
             int availableH = getHeight() - (padding * 2);
-            
             int tileW = availableW / mapCols;
             int tileH = availableH / mapRows;
             int TILE_SIZE = Math.min(tileW, tileH); 
             TILE_SIZE = Math.max(TILE_SIZE, 40);
 
-            // 중앙정렬
             int startX = (getWidth() - (TILE_SIZE * mapCols)) / 2;
             int startY = (getHeight() - (TILE_SIZE * mapRows)) / 2;
 
-            // 맵 그리기
             for (int y = 0; y < 8; y++) {
                 for (int x = 0; x < 12; x++) {
                     int type = gameState.map[y][x];
@@ -169,19 +228,18 @@ public class GamePanel extends JPanel {
                     else if (type == 4) { fileName = "tile_boss.png"; fallbackColor = new Color(128, 0, 128); }
                     
                     Image tileImg = ResourceManager.getImage("map", fileName);
-                    
                     int drawX = startX + (x * TILE_SIZE);
                     int drawY = startY + (y * TILE_SIZE);
 
                     if (tileImg != null) {
                         g.drawImage(tileImg, drawX, drawY, TILE_SIZE, TILE_SIZE, null);
-                    } else { // 타일 이미지 없을시 기존 타일
+                    } else {
                         g.setColor(fallbackColor);
                         g.fillRect(drawX, drawY, TILE_SIZE, TILE_SIZE);
                         g.setColor(Color.BLACK); 
                         g.drawRect(drawX, drawY, TILE_SIZE, TILE_SIZE);
                     }
-
+                    
                     int fontSize = Math.max(12, TILE_SIZE / 4);
                     g.setFont(new Font("SansSerif", Font.BOLD, fontSize));
 
@@ -198,7 +256,6 @@ public class GamePanel extends JPanel {
                 }
             }
             
-            // 캐릭터 그리기
             for (Player p : gameState.players) {
                 int drawX = startX + (p.x * TILE_SIZE);
                 int drawY = startY + (p.y * TILE_SIZE);
@@ -210,7 +267,7 @@ public class GamePanel extends JPanel {
                     int pPadding = TILE_SIZE / 10;
                     g.drawImage(charImg, drawX + pPadding, drawY + pPadding, 
                               TILE_SIZE - 2*pPadding, TILE_SIZE - 2*pPadding, null);
-                } else { // 캐릭터 이미지 없으면 원
+                } else {
                     g.setColor(p.color);
                     g.fillOval(drawX + TILE_SIZE/5, drawY + TILE_SIZE/5, TILE_SIZE * 3/5, TILE_SIZE * 3/5);
                     g.setColor(Color.WHITE); 

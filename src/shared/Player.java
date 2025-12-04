@@ -16,6 +16,7 @@ public class Player implements Serializable {
     // 이동 관련
     public int movePoints = 0; 
     public boolean hasRolled = false;
+    public int lastRoll = 0;
     public int hp; 
 
     // 기본 스탯

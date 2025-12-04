@@ -35,7 +35,7 @@ public class GameManager {
         if (gameState.currentTurnPlayerId != playerId) return;
         
         Player p = gameState.players.get(playerId);
-        
+
         if (p.hp <= 0) {
             gameState.logMessage = "☠️ 사망자는 행동할 수 없습니다.";
             return;
@@ -43,7 +43,11 @@ public class GameManager {
 
         if (p.hasRolled || p.movePoints > 0) return; 
 
-        p.movePoints = new Random().nextInt(6) + 1;
+        int rollResult = new Random().nextInt(6) + 1;
+        
+        p.movePoints = rollResult; // 이동할 때마다 줄어드는 값
+        p.lastRoll = rollResult;
+        
         p.hasRolled = true;
         gameState.logMessage = String.format("🎲 %s 주사위 결과: %d", p.name, p.movePoints);
     }
@@ -54,6 +58,7 @@ public class GameManager {
         
         Player p = gameState.players.get(playerId);
 
+        // 좀비 방지
         if (p.hp <= 0) return;
 
         if (p.movePoints <= 0) { gameState.logMessage = "🚫 이동력이 부족합니다!"; return; }
@@ -156,10 +161,7 @@ public class GameManager {
         
         for (Player other : gameState.players) {
             if (other.id == triggerPlayer.id) continue;
-
             int dist = Math.max(Math.abs(triggerPlayer.x - other.x), Math.abs(triggerPlayer.y - other.y));
-            
-            // 거리가 2칸 이내이고, 살아있으면 참가
             if (dist <= 2 && other.hp > 0) {
                 participants.add(other);
             }
@@ -268,7 +270,6 @@ public class GameManager {
             if (target.hp == 0) gameState.battleLog.add("☠️ " + target.name + "님이 쓰러졌습니다!");
         }
 
-        // 전투 종료(전멸) 체크
         boolean allParticipantsDead = true;
         for (int pid : gameState.battleMemberIds) {
             if (gameState.players.get(pid).hp > 0) {
@@ -332,7 +333,7 @@ public class GameManager {
         checkMonsterDeath();
         
         if (gameState.monsters.stream().allMatch(m -> m.isDead)) {
-            endBattle(true); // 승리
+            endBattle(true);
             return;
         }
 
@@ -370,7 +371,7 @@ public class GameManager {
     }
 
     private void resetGame() {
-        GameState newState = new GameState();
+        GameState newState = new GameState(); 
         gameState.map = newState.map;
         gameState.roundNumber = 1;
         gameState.teamGold = 100;
@@ -379,17 +380,16 @@ public class GameManager {
         gameState.isShopMode = false;
         gameState.monsters.clear();
 
-        // 2. 플레이어 상태 초기화
         for (Player p : gameState.players) {
             p.hp = p.getTotalMaxHp();
-            p.x = 0; p.y = 0; // 시작 지점으로 이동
+            p.x = 0; p.y = 0; 
             p.movePoints = 0;
             p.hasRolled = false;
-            p.isReady = false; // 준비 상태 해제
+            p.isReady = false; 
+            p.lastRoll = 0;
         }
         gameState.currentTurnPlayerId = 0;
 
-        // 3. 클라이언트들에게 GAME_OVER 메시지 전송 (로비로 이동하라고 명령)
         GameServer.broadcast(new Message(Message.Type.GAME_OVER, null));
         GameServer.broadcast(new Message(Message.Type.LOBBY_UPDATE, new ArrayList<>(gameState.players)));
     }
@@ -400,6 +400,7 @@ public class GameManager {
         Player currentP = gameState.players.get(playerId);
         currentP.movePoints = 0;
         currentP.hasRolled = false;
+        currentP.lastRoll = 0;
 
         boolean allDead = true;
         for(Player p : gameState.players) {
