@@ -9,13 +9,13 @@ import java.util.Queue;
 public class GameState implements Serializable {
     private static final long serialVersionUID = 1L;
 
+    public final int MAP_COLS = 12; // 가로
+    public final int MAP_ROWS = 8;  // 세로
     public int[][] map;
+    
     public List<Player> players = new ArrayList<>();
     public int currentTurnPlayerId = 0;
-    
-    // ⭐ [핵심 수정] 초기값을 0으로 변경 (0: 대기실, 1~: 게임시작)
     public int roundNumber = 0; 
-    
     public String logMessage = "대기실 입장";
     public int teamLives = 3; 
 
@@ -33,7 +33,7 @@ public class GameState implements Serializable {
     public String shopWarning = "";
 
     public GameState() {
-        map = new int[10][10];
+        map = new int[MAP_ROWS][MAP_COLS];
         while (true) {
             generateRandomMap();
             if (isValidMap()) break;
@@ -41,8 +41,8 @@ public class GameState implements Serializable {
     }
 
     private void generateRandomMap() {
-        for(int i=0; i<10; i++) {
-            for(int j=0; j<10; j++) {
+        for(int i=0; i<MAP_ROWS; i++) {
+            for(int j=0; j<MAP_COLS; j++) {
                 double r = Math.random();
                 if(r < 0.25) map[i][j] = 1; 
                 else if(r < 0.35) map[i][j] = 2; 
@@ -55,7 +55,7 @@ public class GameState implements Serializable {
     }
 
     private boolean isValidMap() {
-        boolean[][] visited = new boolean[10][10];
+        boolean[][] visited = new boolean[MAP_ROWS][MAP_COLS];
         Queue<Point> queue = new LinkedList<>();
         queue.add(new Point(0, 0));
         visited[0][0] = true;
@@ -69,7 +69,7 @@ public class GameState implements Serializable {
             for (int i = 0; i < 4; i++) {
                 int nx = p.x + dx[i];
                 int ny = p.y + dy[i];
-                if (nx >= 0 && nx < 10 && ny >= 0 && ny < 10) {
+                if (nx >= 0 && nx < MAP_COLS && ny >= 0 && ny < MAP_ROWS) {
                     if (!visited[ny][nx] && map[ny][nx] != 1) {
                         visited[ny][nx] = true;
                         queue.add(new Point(nx, ny));
@@ -77,9 +77,12 @@ public class GameState implements Serializable {
                 }
             }
         }
-        if (count < 20) return false;
-        for(int i=0; i<10; i++) {
-            for(int j=0; j<10; j++) {
+        // 맵이 넓어졌으므로 최소 타일 개수 조건도 20 -> 30 정도로 상향
+        if (count < 30) return false;
+        
+        // 몬스터나 상점이 갈 수 없는 곳에 있으면 안됨
+        for(int i=0; i<MAP_ROWS; i++) {
+            for(int j=0; j<MAP_COLS; j++) {
                 if ((map[i][j] == 2 || map[i][j] == 3) && !visited[i][j]) return false;
             }
         }

@@ -15,13 +15,13 @@ public class ClientApp extends JFrame {
     private Socket socket;
     private ObjectOutputStream out;
     private ObjectInputStream in;
-    
+
     private int myId = -1;
     private String myName;
 
     private CardLayout cardLayout;
     private JPanel mainContainer;
-    
+
     private LobbyPanel lobbyPanel;
     private GamePanel gamePanel;
     private BattlePanel battlePanel;
@@ -29,7 +29,10 @@ public class ClientApp extends JFrame {
 
     public ClientApp() {
         setTitle("For The King - 접속 중...");
+
+        // ⭐ [수정] 초기 실행 시(로비)에는 기본 크기로 설정
         setSize(850, 650);
+        setLocationRelativeTo(null); // 화면 중앙 배치
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
         cardLayout = new CardLayout();
@@ -61,22 +64,58 @@ public class ClientApp extends JFrame {
         ActionMap actionMap = mainContainer.getActionMap();
 
         inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_UP, 0), "MOVE_UP");
-        actionMap.put("MOVE_UP", new AbstractAction() { public void actionPerformed(ActionEvent e) { sendMove(0, -1); } });
+        actionMap.put("MOVE_UP", new AbstractAction() {
+            public void actionPerformed(ActionEvent e) {
+                sendMove(0, -1);
+            }
+        });
+
         inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, 0), "MOVE_DOWN");
-        actionMap.put("MOVE_DOWN", new AbstractAction() { public void actionPerformed(ActionEvent e) { sendMove(0, 1); } });
+        actionMap.put("MOVE_DOWN", new AbstractAction() {
+            public void actionPerformed(ActionEvent e) {
+                sendMove(0, 1);
+            }
+        });
+
         inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_LEFT, 0), "MOVE_LEFT");
-        actionMap.put("MOVE_LEFT", new AbstractAction() { public void actionPerformed(ActionEvent e) { sendMove(-1, 0); } });
+        actionMap.put("MOVE_LEFT", new AbstractAction() {
+            public void actionPerformed(ActionEvent e) {
+                sendMove(-1, 0);
+            }
+        });
+
         inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_RIGHT, 0), "MOVE_RIGHT");
-        actionMap.put("MOVE_RIGHT", new AbstractAction() { public void actionPerformed(ActionEvent e) { sendMove(1, 0); } });
+        actionMap.put("MOVE_RIGHT", new AbstractAction() {
+            public void actionPerformed(ActionEvent e) {
+                sendMove(1, 0);
+            }
+        });
     }
 
     private void sendMove(int dx, int dy) {
         if (!gamePanel.isVisible()) return;
-        send(new Message(Message.Type.MOVE_REQ, new int[]{dx, dy}));
+        send(new Message(Message.Type.MOVE_REQ, new int[] { dx, dy }));
     }
 
     public void switchToLobby() {
         SwingUtilities.invokeLater(() -> cardLayout.show(mainContainer, "LOBBY"));
+    }
+
+    // ⭐ [추가] 창 모드 전환 헬퍼 메서드
+    private void setWindowMode(boolean isGameMode) {
+        if (isGameMode) {
+            // 게임 중: 최대화
+            if (getExtendedState() != JFrame.MAXIMIZED_BOTH) {
+                setExtendedState(JFrame.MAXIMIZED_BOTH);
+            }
+        } else {
+            // 로비: 일반 크기 복구
+            if (getExtendedState() != JFrame.NORMAL) {
+                setExtendedState(JFrame.NORMAL);
+                setSize(850, 650);
+                setLocationRelativeTo(null); // 다시 중앙으로
+            }
+        }
     }
 
     private void connect() {
@@ -111,17 +150,20 @@ public class ClientApp extends JFrame {
                         case START_GAME:
                             GameState initialState = (GameState) msg.payload;
                             SwingUtilities.invokeLater(() -> {
+                                // ⭐ 게임 시작 시 창 최대화
+                                setWindowMode(true);
+                                
                                 gamePanel.updateState(initialState);
                                 cardLayout.show(mainContainer, "GAME");
                                 mainContainer.requestFocusInWindow();
                             });
                             break;
-                            
+
                         case STATE_UPDATE:
                             GameState state = (GameState) msg.payload;
                             SwingUtilities.invokeLater(() -> {
-                                // ⭐ [핵심 수정] 라운드가 0이면 로비 상태로 간주
                                 boolean isLobbyState = (state.roundNumber == 0);
+                                setWindowMode(!isLobbyState);
 
                                 if (!state.isBattleMode && !state.isShopMode && state.currentTurnPlayerId == myId) {
                                     Player me = state.players.get(myId);
@@ -137,13 +179,13 @@ public class ClientApp extends JFrame {
                                     shopPanel.updateState(state);
                                     cardLayout.show(mainContainer, "SHOP");
                                 } else {
-                                    if (!isLobbyState) { // 게임 중 (Round 1 이상)
+                                    if (!isLobbyState) {
                                         gamePanel.updateState(state);
                                         if (!lobbyPanel.isVisible()) {
                                             cardLayout.show(mainContainer, "GAME");
                                             mainContainer.requestFocusInWindow();
                                         }
-                                    } else { // 로비 상태 (Round 0)
+                                    } else {
                                         cardLayout.show(mainContainer, "LOBBY");
                                     }
                                 }
@@ -164,11 +206,18 @@ public class ClientApp extends JFrame {
                 out.writeObject(msg);
                 out.flush();
             }
-        } catch (IOException e) { e.printStackTrace(); }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
-    public int getMyId() { return myId; }
-    public String getMyName() { return myName; }
+    public int getMyId() {
+        return myId;
+    }
+
+    public String getMyName() {
+        return myName;
+    }
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(ClientApp::new);
